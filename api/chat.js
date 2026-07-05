@@ -6,9 +6,65 @@ const SOURCES = {
   canva:    { url: 'https://mcp.canva.com/mcp',              name: 'canva',        tokenEnv: 'CANVA_MCP_TOKEN' }
 };
 
-/* Supabase — carrega só se configurado */
 let db = null;
 try { db = require('./supabase'); } catch(e) { console.warn('[nexus] supabase não disponível:', e.message); }
+
+/* ---- helpers de rotinas (acesso direto ao Supabase de memória) ---- */
+function sbHeaders() {
+  return {
+    'apikey': process.env.SUPABASE_ANON_KEY,
+    'authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+    'content-type': 'application/json',
+    'prefer': 'return=representation'
+  };
+}
+async function getAllRoutines(userId) {
+  const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/routines?user_id=eq.${userId}&active=eq.true&select=id,trigger_type,action`, { headers: sbHeaders() });
+  return r.json();
+}
+async function createRoutine(userId, triggerType, action) {
+  const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/routines`, {
+    method: 'POST', headers: sbHeaders(),
+    body: JSON.stringify({ user_id: userId, trigger_type: triggerType, action, active: true })
+  });
+  return r.json();
+}
+async function deactivateRoutine(userId, searchText) {
+  const q = encodeURIComponent(`%${searchText}%`);
+  const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/routines?user_id=eq.${userId}&active=eq.true&action=ilike.${q}`, {
+    method: 'PATCH', headers: sbHeaders(),
+    body: JSON.stringify({ active: false })
+  });
+  return r.json();
+}
+
+/* ---- briefing do dia: puxa os números direto do Financeiro MH ---- */
+async function buildBriefing() {
+  const FIN_URL = process.env.FINANCEIRO_SUPABASE_URL;
+  const FIN_KEY = process.env.FINANCEIRO_SUPABASE_KEY;
+  const FIN_EMAIL = process.env.FINANCEIRO_USER_EMAIL;
+  if (!FIN_URL || !FIN_KEY || !FIN_EMAIL) return '';
+  const call = async (fn, extra = {}) => {
+    try {
+      const r = await fetch(`${FIN_URL}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: { 'apikey': FIN_KEY, 'authorization': `Bearer ${FIN_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ p_email: FIN_EMAIL, ...extra })
+      });
+      return await r.json();
+    } catch (e) { return null; }
+  };
+  const [resumo, vencer, meta] = await Promise.all([
+    call('resumo_mensal'),
+    call('contas_a_vencer', { p_dias: 3 }),
+    call('faturamento_vs_meta')
+  ]);
+  let out = '';
+  if (resumo && resumo.length) out += '\nResumo do mês: ' + JSON.stringify(resumo);
+  if (vencer && vencer.length) out += '\nContas vencendo nos próximos 3 dias: ' + JSON.stringify(vencer);
+  if (meta && meta.length) out += '\nFaturamento vs meta: ' + JSON.stringify(meta);
+  return out;
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: { message: 'use POST' } });
@@ -19,16 +75,18 @@ module.exports = async (req, res) => {
   }
 
   try {
-    /* ---- Supabase: memória e histórico (opcional, não bloqueia se falhar) ---- */
     let memoryBlock = '';
     let routineBlock = '';
+    let briefingBlock = '';
     let savedUserMsg = null;
     let session = null;
+    let userId = null;
 
     if (db && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
       try {
         const user = await db.getOrCreateUser(userName);
         if (user && user.id) {
+          userId = user.id;
           session = await db.getOrCreateSession(user.id);
 
           const memories = await db.getMemories(user.id);
@@ -37,14 +95,20 @@ module.exports = async (req, res) => {
               + memories.map(m => `- [${m.category}] ${m.content}`).join('\n');
           }
 
+          /* rotinas: sempre no contexto, pra listar/remover por voz */
+          const routines = await getAllRoutines(user.id);
+          if (routines && routines.length) {
+            routineBlock = '\n\n== ROTINAS ATIVAS DO USUÁRIO ==\n'
+              + routines.map(r => `- [${r.trigger_type}] ${r.action}`).join('\n');
+          }
+
+          /* primeira conversa do dia: briefing + executar rotinas first_of_day */
           const firstOfDay = await db.isFirstOfDay(user.id);
           if (firstOfDay) {
-            const routines = await db.getRoutines(user.id, 'first_of_day');
-            if (routines && routines.length) {
-              routineBlock = '\n\n== ROTINAS PARA A PRIMEIRA INTERAÇÃO DO DIA ==\n'
-                + routines.map(r => `- ${r.action}`).join('\n')
-                + '\nExecute essas rotinas naturalmente na sua resposta.';
-            }
+            const dados = await buildBriefing();
+            briefingBlock = '\n\n== PRIMEIRA CONVERSA DO DIA ==\n'
+              + 'Esta é a primeira interação de hoje. Comece a resposta com um briefing executivo CURTO (2-3 frases): situação do mês, contas vencendo em breve se houver, e como está a meta. Dados reais abaixo. Depois responda o que foi perguntado e execute as rotinas marcadas como first_of_day (ex.: se houver rotina de perguntar a música, pergunte ao final).'
+              + (dados || '\n(Financeiro indisponível agora — faça o briefing sem números.)');
           }
 
           if (session && session.id) {
@@ -57,19 +121,29 @@ module.exports = async (req, res) => {
       }
     }
 
-    /* ---- Sistema enriquecido ---- */
     const enrichedSystem = system
       + memoryBlock
       + routineBlock
+      + briefingBlock
       + `\n\n== INSTRUÇÕES DE MEMÓRIA ==
 Se o usuário compartilhar informações pessoais importantes (preferências, dados da empresa, metas, gostos, rotinas), responda normalmente E adicione ao final da sua resposta, invisível ao usuário, um bloco:
 <memory_extract>
 categoria: preferência|empresa|meta|gosto|rotina|pessoal
 conteúdo: frase curta descrevendo o fato
 </memory_extract>
-Pode adicionar múltiplos blocos. Só extraia fatos claros e relevantes, não extraia a cada mensagem.`;
+Pode adicionar múltiplos blocos. Só extraia fatos claros e relevantes, não extraia a cada mensagem.
 
-    /* ---- MCP ---- */
+== INSTRUÇÕES DE ROTINAS ==
+O usuário pode criar e remover rotinas por voz. Quando ele pedir para você fazer algo recorrente (ex.: "toda manhã me pergunte qual música quero ouvir", "sempre que eu falar contigo pela primeira vez no dia, me dê o resumo das contas"), confirme naturalmente na resposta E adicione ao final um bloco invisível:
+<routine_create>
+trigger: first_of_day
+ação: descrição curta do que fazer
+</routine_create>
+Por enquanto o único trigger suportado é first_of_day (primeira conversa do dia).
+Quando ele pedir para remover/cancelar uma rotina, confirme E adicione:
+<routine_delete>palavra-chave da rotina a remover</routine_delete>
+Se ele perguntar quais rotinas tem, responda com base na lista de ROTINAS ATIVAS acima.`;
+
     const mcp_servers = [];
     for (const key of sources) {
       const s = SOURCES[key];
@@ -86,30 +160,43 @@ Pode adicionar múltiplos blocos. Só extraia fatos claros e relevantes, não ex
     const headers = { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01' };
     if (mcp_servers.length) headers['anthropic-beta'] = 'mcp-client-2025-04-04';
 
-    /* ---- Chamar Claude ---- */
     const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(payload) });
     const data = await r.json();
 
-    /* ---- Salvar resposta e extrair memórias (só se Supabase ativo) ---- */
-    if (data.content && db && session && session.id) {
-      try {
-        let fullAnswer = data.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+    if (data.content) {
+      const fullAnswer = data.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
 
-        const memRegex = /<memory_extract>\s*categoria:\s*(.+?)\s*conteúdo:\s*(.+?)\s*<\/memory_extract>/gs;
-        let match;
-        const user = await db.getOrCreateUser(userName);
-        while ((match = memRegex.exec(fullAnswer)) !== null) {
-          if (user && user.id) {
-            await db.addMemory(user.id, match[1].trim(), match[2].trim(), savedUserMsg?.id);
-          }
+      /* 1º: extrair os comandos invisíveis */
+      const mems = [...fullAnswer.matchAll(/<memory_extract>\s*categoria:\s*(.+?)\s*conteúdo:\s*(.+?)\s*<\/memory_extract>/gs)];
+      const rcs  = [...fullAnswer.matchAll(/<routine_create>\s*trigger:\s*(.+?)\s*ação:\s*(.+?)\s*<\/routine_create>/gs)];
+      const rds  = [...fullAnswer.matchAll(/<routine_delete>\s*(.+?)\s*<\/routine_delete>/gs)];
+
+      /* 2º: limpar a resposta SEMPRE, antes de qualquer efeito no banco */
+      const cleanAnswer = fullAnswer
+        .replace(/<memory_extract>[\s\S]*?<\/memory_extract>/g, '')
+        .replace(/<routine_create>[\s\S]*?<\/routine_create>/g, '')
+        .replace(/<routine_delete>[\s\S]*?<\/routine_delete>/g, '')
+        .trim();
+      data.content = [{ type: 'text', text: cleanAnswer }];
+
+      /* 3º: efeitos no banco (se falharem, a resposta já está limpa) */
+      if (userId) {
+        for (const m of mems) {
+          try { await db.addMemory(userId, m[1].trim(), m[2].trim(), savedUserMsg?.id); }
+          catch (e) { console.warn('[nexus] memória não salva:', e.message); }
         }
-
-        const cleanAnswer = fullAnswer.replace(/<memory_extract>[\s\S]*?<\/memory_extract>/g, '').trim();
-        data.content = [{ type: 'text', text: cleanAnswer }];
-
-        await db.saveMessage(session.id, 'assistant', cleanAnswer);
-      } catch (saveErr) {
-        console.warn('[nexus] erro ao salvar resposta:', saveErr.message);
+        for (const m of rcs) {
+          try { await createRoutine(userId, m[1].trim(), m[2].trim()); console.log('[nexus] rotina criada:', m[2].trim()); }
+          catch (e) { console.warn('[nexus] rotina não criada:', e.message); }
+        }
+        for (const m of rds) {
+          try { const rem = await deactivateRoutine(userId, m[1].trim()); console.log('[nexus] rotinas desativadas:', Array.isArray(rem) ? rem.length : 0); }
+          catch (e) { console.warn('[nexus] rotina não removida:', e.message); }
+        }
+      }
+      if (session && session.id) {
+        try { await db.saveMessage(session.id, 'assistant', cleanAnswer); }
+        catch (e) { console.warn('[nexus] histórico não salvo:', e.message); }
       }
     }
 
