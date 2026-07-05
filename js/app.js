@@ -915,7 +915,8 @@ async function ask(text){
       if(/meta/i.test(text))actions.push({action:'faturamento_vs_meta'});
       if(/despes|gast/i.test(text))actions.push({action:'top_despesas'});
       if(/fluxo/i.test(text))actions.push({action:'fluxo_diario'});
-      if(actions.length===0)actions.push({action:'resumo_mensal'});
+      if(/quais|detalh|categoria|extrato|lista|o que|movimenta/i.test(text))actions.push({action:'movimentacoes_mes'});
+      if(actions.length===0){actions.push({action:'resumo_mensal'});actions.push({action:'top_despesas'});}
       for(const a of actions){
         const fr=await fetch('/api/financeiro',{
           method:'POST',
@@ -928,8 +929,22 @@ async function ask(text){
     }catch(e){console.warn('financeiro indisponível:',e);}
   }
 
+  /* ---- Dados de anúncios (Meta/Facebook) ---- */
+  const adsWords=['anunc','ads','campanha','facebook','instagram','meta','trafego','tráfego','cpc','ctr','impress'];
+  if(adsWords.some(w=>text.toLowerCase().includes(w))){
+    try{
+      const periodo=/ontem/i.test(text)?'yesterday':/hoje/i.test(text)?'today':/semana|7 dia/i.test(text)?'last_7d':/mês passado|mes passado/i.test(text)?'last_month':'this_month';
+      const action=/campanha/i.test(text)?'campanhas':'resumo';
+      const fr=await fetch('/api/facebook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,periodo})});
+      const fd=await fr.json();
+      if(fd.data&&!fd.data.erro)finData+='\n[DADOS: facebook_ads '+fd.periodo+'] '+JSON.stringify(fd.data);
+      else if(fd.data&&fd.data.erro)finData+='\n[FACEBOOK ADS INDISPONÍVEL: '+fd.data.erro+']';
+    }catch(e){console.warn('facebook indisponível:',e);}
+  }
+
   const lastMsg=history[history.length-1];
   const enrichedHistory=finData
+  
     ?[...history.slice(0,-1),{role:'user',content:lastMsg.content+finData}]
     :history;
 
