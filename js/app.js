@@ -766,36 +766,79 @@ micBtn.onclick=()=>{
   capturing=true;capBuffer='';setState('listening');whoosh();resetCapTimer();
 };
 
-/* ============ VOZ: SAÍDA ============ */
+/* ============ VOZ: SAÍDA (ElevenLabs) ============ */
+/* Fallback: vozes do navegador caso ElevenLabs falhe */
 const voiceSel=document.getElementById('voiceSel');
 let voices=[];
 function loadVoices(){
   voices=speechSynthesis.getVoices();
   const pt=voices.filter(v=>v.lang&&v.lang.toLowerCase().startsWith('pt'));
   const list=pt.length?pt:voices;
-  voiceSel.innerHTML=list.map(v=>`<option value="${v.name}">${v.name} (${v.lang})</option>`).join('');
-  const best=list.find(v=>/luciana|francisca|maria|brasil|br/i.test(v.name))||list[0];
-  if(best)voiceSel.value=best.name;
+  const opt='<option value="elevenlabs">NEXUS (ElevenLabs)</option>';
+  voiceSel.innerHTML=opt+list.map(v=>`<option value="${v.name}">${v.name} (${v.lang})</option>`).join('');
+  voiceSel.value='elevenlabs';
 }
 speechSynthesis.onvoiceschanged=loadVoices;loadVoices();
 
-function speak(text,onDone){
+let currentAudio=null;
+function stopAudio(){
+  if(currentAudio){currentAudio.pause();currentAudio=null;}
+  speechSynthesis.cancel();
+}
+
+async function speakEL(text){
+  return new Promise(async(resolve)=>{
+    try{
+      const r=await fetch('/api/tts',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text:text.slice(0,2500)})
+      });
+      if(!r.ok)throw new Error('TTS falhou: '+r.status);
+      const blob=await r.blob();
+      const url=URL.createObjectURL(blob);
+      const audio=new Audio(url);
+      currentAudio=audio;
+      audio.onended=()=>{currentAudio=null;URL.revokeObjectURL(url);resolve();};
+      audio.onerror=()=>{currentAudio=null;URL.revokeObjectURL(url);resolve();};
+      audio.play();
+    }catch(e){
+      console.warn('ElevenLabs falhou, usando navegador:',e);
+      speakBrowser(text).then(resolve);
+    }
+  });
+}
+
+function speakBrowser(text){
+  return new Promise(resolve=>{
+    const clean=text.replace(/[*#_\`>]/g,'').replace(/\s+/g,' ').trim();
+    const parts=clean.match(/[^.!?…]+[.!?…]?/g)||[clean];
+    let i=0;
+    const next=()=>{
+      if(i>=parts.length){resolve();return;}
+      const u=new SpeechSynthesisUtterance(parts[i++].trim());
+      const v=voices.find(v=>v.name===voiceSel.value);if(v)u.voice=v;
+      u.lang='pt-BR';u.rate=1.04;u.pitch=1.0;
+      u.onend=next;u.onerror=next;
+      speechSynthesis.speak(u);
+    };
+    next();
+  });
+}
+
+async function speak(text,onDone){
   suppress=true;try{if(rec)rec.stop();}catch(e){}
   if(!document.getElementById('ttsOn').checked){setState('idle');onDone&&onDone();return;}
-  speechSynthesis.cancel();
-  const clean=text.replace(/[*#_`>]/g,'').replace(/\s+/g,' ').trim();
-  const parts=clean.match(/[^.!?…]+[.!?…]?/g)||[clean];
-  let i=0;
+  stopAudio();
+  const clean=text.replace(/[*#_\`>]/g,'').replace(/\s+/g,' ').trim();
   setState('speaking');
-  const next=()=>{
-    if(i>=parts.length){setState('idle');onDone&&onDone();return;}
-    const u=new SpeechSynthesisUtterance(parts[i++].trim());
-    const v=voices.find(v=>v.name===voiceSel.value);if(v)u.voice=v;
-    u.lang='pt-BR';u.rate=1.04;u.pitch=1.0;
-    u.onend=next;u.onerror=next;
-    speechSynthesis.speak(u);
-  };
-  next();
+  if(voiceSel.value==='elevenlabs'){
+    await speakEL(clean);
+  }else{
+    await speakBrowser(clean);
+  }
+  setState('idle');
+  onDone&&onDone();
 }
 
 /* ============ CÉREBRO ============ */
