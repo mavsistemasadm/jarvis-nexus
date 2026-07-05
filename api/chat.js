@@ -67,6 +67,19 @@ async function lancarMovimentacao(l) {
   return r.json();
 }
 
+/* ---- Spotify por voz ---- */
+async function spotifyAcao(acao, busca) {
+  try {
+    const sp = require('./spotify');
+    /* chama o próprio handler internamente */
+    return await new Promise((resolve) => {
+      const req = { method: 'POST', url: '/api/spotify', body: { acao, busca } };
+      const res = { statusCode: 200, status(c){this.statusCode=c;return this;}, setHeader(){}, json(o){resolve(o);}, end(){resolve({});} };
+      sp(req, res).catch(e => resolve({ erro: String(e.message || e) }));
+    });
+  } catch (e) { return { erro: String(e.message || e) }; }
+}
+
 /* ---- briefing do dia: puxa os números direto do Financeiro MH ---- */
 async function buildBriefing() {
   const FIN_URL = process.env.FIN_TEST_URL || process.env.FINANCEIRO_SUPABASE_URL;
@@ -124,13 +137,15 @@ module.exports = async (req, res) => {
               + memories.map(m => `- [${m.category}] ${m.content}`).join('\n');
           }
 
+          /* rotinas: sempre no contexto, pra listar/remover por voz */
           const routines = await getAllRoutines(user.id);
           if (routines && routines.length) {
             routineBlock = '\n\n== ROTINAS ATIVAS DO USUÁRIO ==\n'
               + routines.map(r => `- [${r.trigger_type}] ${r.action}`).join('\n');
           }
 
-          const firstOfDay = await db.isFirstOfDay(user.id);
+          /* primeira conversa do dia: briefing + executar rotinas first_of_day */
+          const firstOfDay = process.env.NEXUS_TEST_FIRSTDAY === '1' ? true : await db.isFirstOfDay(user.id);
           if (firstOfDay) {
             const dados = await buildBriefing();
             briefingBlock = '\n\n== PRIMEIRA CONVERSA DO DIA ==\n'
@@ -181,7 +196,13 @@ Fluxo OBRIGATÓRIO em duas etapas:
 {"tipo":"Despesa","empresa":"MH Cálculos","descricao":"Almoço","valor":200,"data":"2026-07-05","vencimento":"2026-07-05","categoria":"Alimentação","centro":"","produto":"","pago":true,"data_pagamento":"2026-07-05","banco":"Nubank","forma_pagamento":"Pix"}
 </lancamento_criar>
 Use a data de hoje quando ele disser "hoje". Valores sempre numéricos (200, não "duzentos").
-Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima versão e ofereça lançar avulso.`;
+Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima versão e ofereça lançar avulso.
+
+== INSTRUÇÕES DE MÚSICA (SPOTIFY) ==
+O usuário pode controlar o Spotify por voz. Quando ele pedir uma música/artista/banda (ex.: "toca AC/DC", "coloca uma do Metallica", ou responder a rotina da manhã com o nome de uma música), confirme naturalmente E adicione o bloco invisível:
+<spotify_play>nome do artista ou música</spotify_play>
+Para pausar: <spotify_ctrl>pause</spotify_ctrl> | continuar: <spotify_ctrl>play</spotify_ctrl> | próxima: <spotify_ctrl>next</spotify_ctrl> | anterior: <spotify_ctrl>previous</spotify_ctrl>
+Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado), o servidor avisa o usuário — você não precisa tratar.`;
 
     const mcp_servers = [];
     for (const key of sources) {
@@ -210,6 +231,8 @@ Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima ve
       const rcs  = [...fullAnswer.matchAll(/<routine_create>\s*trigger:\s*(.+?)\s*ação:\s*(.+?)\s*<\/routine_create>/gs)];
       const rds  = [...fullAnswer.matchAll(/<routine_delete>\s*(.+?)\s*<\/routine_delete>/gs)];
       const lans = [...fullAnswer.matchAll(/<lancamento_criar>\s*([\s\S]+?)\s*<\/lancamento_criar>/g)];
+      const spls = [...fullAnswer.matchAll(/<spotify_play>\s*(.+?)\s*<\/spotify_play>/gs)];
+      const spcs = [...fullAnswer.matchAll(/<spotify_ctrl>\s*(.+?)\s*<\/spotify_ctrl>/gs)];
 
       /* 2º: limpar a resposta SEMPRE, antes de qualquer efeito no banco */
       const cleanAnswer = fullAnswer
@@ -217,6 +240,8 @@ Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima ve
         .replace(/<routine_create>[\s\S]*?<\/routine_create>/g, '')
         .replace(/<routine_delete>[\s\S]*?<\/routine_delete>/g, '')
         .replace(/<lancamento_criar>[\s\S]*?<\/lancamento_criar>/g, '')
+        .replace(/<spotify_play>[\s\S]*?<\/spotify_play>/g, '')
+        .replace(/<spotify_ctrl>[\s\S]*?<\/spotify_ctrl>/g, '')
         .trim();
       data.content = [{ type: 'text', text: cleanAnswer }];
 
@@ -235,7 +260,6 @@ Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima ve
           catch (e) { console.warn('[nexus] rotina não removida:', e.message); }
         }
       }
-
       /* lançamentos financeiros confirmados */
       for (const m of lans) {
         try {
@@ -248,6 +272,17 @@ Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima ve
           console.error('[nexus] lançamento FALHOU:', e.message);
           data.content = [{ type: 'text', text: 'Atenção: não consegui gravar o lançamento no financeiro. Erro: ' + e.message + '. Nada foi salvo — tenta de novo ou lança manualmente.' }];
         }
+      }
+
+      /* Spotify */
+      for (const m of spls) {
+        const r = await spotifyAcao('tocar', m[1].trim());
+        if (r && r.erro) data.content = [{ type: 'text', text: 'Não consegui tocar: ' + r.erro }];
+        else if (r && r.tocando) console.log('[nexus] tocando:', r.tocando);
+      }
+      for (const m of spcs) {
+        const r = await spotifyAcao(m[1].trim());
+        if (r && r.erro) data.content = [{ type: 'text', text: 'Spotify: ' + r.erro }];
       }
 
       if (session && session.id) {
