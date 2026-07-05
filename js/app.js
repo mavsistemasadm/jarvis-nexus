@@ -800,14 +800,16 @@ function speak(text,onDone){
 
 /* ============ CÉREBRO ============ */
 /* fontes de dados: configuradas no servidor (server.js + .env) */
-const SYSTEM=`Você é NEXUS, o assistente pessoal de negócios do usuário (estilo Jarvis do Tony Stark). Regras:
+const SYSTEM=`Você é NEXUS, o assistente pessoal de negócios do Marlos, dono do Grupo MH (MH Cálculos Judiciais, Nexus ecossistema pericial, AnyCalc). Regras:
 - Responda SEMPRE em português do Brasil.
-- Suas respostas serão lidas em voz alta: seja direto, natural e conciso (2 a 6 frases na maioria dos casos). Nada de listas com marcadores, markdown ou links soltos — fale como uma pessoa.
+- Suas respostas serão lidas em voz alta: seja direto, natural e conciso (2 a 6 frases). Nada de listas, markdown ou links — fale como uma pessoa.
 - Tenha personalidade: confiante, levemente espirituoso quando couber, sem ser forçado. Vá direto ao ponto como um braço direito competente.
-- Para dados de marketing e vendas, use as ferramentas do Windsor.ai. Para documentos e planilhas, use o Google Drive. Para automações, agenda ou sistemas conectados via Make, use as ferramentas do Make.
+- Diga números de forma falável (ex.: "quarenta e sete mil reais" ou "47 mil").
 - Para perguntas gerais, notícias ou qualquer coisa da internet, use a busca na web.
-- Se uma ferramenta falhar ou não estiver conectada, diga isso em uma frase e sugira o caminho.
-- Diga números de forma falável (ex.: "quarenta e sete mil reais" ou "47 mil").`;
+- Se uma ferramenta falhar, diga isso em uma frase e sugira o caminho.
+
+== DADOS FINANCEIROS ==
+Quando os dados financeiros vierem junto na mensagem (entre colchetes [DADOS:...]), use-os para responder com precisão. As empresas do grupo são: MH Cálculos Judiciais, Nexus (ecossistema pericial) e AnyCalc. Sempre que falar de valores, diga de qual empresa é.`;
 
 let history=[];
 const caption=document.getElementById('caption');
@@ -832,10 +834,40 @@ async function ask(text){
   history.push({role:'user',content:text});
   if(history.length>16)history=history.slice(-16);
 
+  /* ---- Dados financeiros: buscar antes de enviar pro Claude ---- */
+  let finData='';
+  const finWords=['fatur','receit','despes','saldo','conta','venc','atras','meta','vend','financ','gastou','gastamos','lucr','fluxo','pagamento','pagar','receber','empresa'];
+  const isFinancial=finWords.some(w=>text.toLowerCase().includes(w));
+  if(isFinancial){
+    try{
+      const actions=[];
+      if(/atras/i.test(text))actions.push({action:'contas_em_atraso'});
+      if(/venc/i.test(text))actions.push({action:'contas_a_vencer',dias:7});
+      if(/meta/i.test(text))actions.push({action:'faturamento_vs_meta'});
+      if(/despes|gast/i.test(text))actions.push({action:'top_despesas'});
+      if(/fluxo/i.test(text))actions.push({action:'fluxo_diario'});
+      if(actions.length===0)actions.push({action:'resumo_mensal'});
+      for(const a of actions){
+        const fr=await fetch('/api/financeiro',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(a)
+        });
+        const fd=await fr.json();
+        if(fd.data)finData+='\n[DADOS: '+a.action+'] '+JSON.stringify(fd.data);
+      }
+    }catch(e){console.warn('financeiro indisponível:',e);}
+  }
+
+  const lastMsg=history[history.length-1];
+  const enrichedHistory=finData
+    ?[...history.slice(0,-1),{role:'user',content:lastMsg.content+finData}]
+    :history;
+
   const sources=[...document.querySelectorAll('#panel input[data-mcp]:checked')].map(el=>el.dataset.mcp);
   const body={
     system:SYSTEM,
-    messages:history,
+    messages:enrichedHistory,
     sources:sources,
     webSearch:document.getElementById('webSearch').checked
   };
