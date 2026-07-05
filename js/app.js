@@ -742,7 +742,9 @@ if(rec){
       const tr=e.results[i][0].transcript;
       if(e.results[i].isFinal)latestFinal+=tr;else interim+=tr;
     }
-const heard=(latestFinal||interim).toLowerCase();console.log('[ouvi]',heard,'cap:',capturing,'sup:',suppress);    if(!capturing){
+const heard=(latestFinal||interim).toLowerCase();    
+
+if(!capturing){
       const w=wakeWord();
       const fuzzy=['jarvis','jarves','jovens','gervis','jervis','jarbas'];
 if(heard.indexOf(w)>=0||fuzzy.some(f=>heard.indexOf(f)>=0)){
