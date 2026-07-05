@@ -707,7 +707,7 @@ if(SR){
 }
 /* ===== escuta contínua: acorda com a palavra de ativação ===== */
 let wakeActive=false,capturing=false,capBuffer='',capTimer=null,suppress=false;
-function wakeWord(){return (document.getElementById('wakeWord').value||'nexus').trim().toLowerCase();}
+function wakeWord(){return (document.getElementById('wakeWord').value||'jarvis').trim().toLowerCase();}
 function idleHint(){showCaption('Diga "'+document.getElementById('wakeWord').value+'" para me chamar.');}
 function tryStart(){if(!rec||!wakeActive||suppress)return;try{rec.start();}catch(e){}}
 function startWake(){if(!rec)return;wakeActive=true;micBtn.classList.add('live');tryStart();}
@@ -722,8 +722,18 @@ function beginThink(q){
 }
 window.resumeWake=function(){
   suppress=false;
-  if(wakeActive)setTimeout(tryStart,250);
+  /* modo conversa: 8s de escuta aberta pra emendar a próxima pergunta */
+  capturing=true;capBuffer='';
+  setState('listening');
+  resetCapTimer();
 };
+
+/* Vigia: garante que o mic está sempre ativo quando deveria */
+setInterval(()=>{
+  if(!rec||!wakeActive||suppress)return;
+  try{rec.start();}catch(e){}
+},2000);
+
 if(rec){
   rec.continuous=true;
   rec.onresult=e=>{
@@ -732,25 +742,40 @@ if(rec){
       const tr=e.results[i][0].transcript;
       if(e.results[i].isFinal)latestFinal+=tr;else interim+=tr;
     }
-    const heard=(latestFinal||interim).toLowerCase();
-    if(!capturing){
+const heard=(latestFinal||interim).toLowerCase();console.log('[ouvi]',heard,'cap:',capturing,'sup:',suppress);    if(!capturing){
       const w=wakeWord();
-      if(heard.indexOf(w)>=0){
+      const fuzzy=['jarvis','jarves','jovens','gervis','jervis','jarbas'];
+if(heard.indexOf(w)>=0||fuzzy.some(f=>heard.indexOf(f)>=0)){
         /* comando emendado na mesma frase: "nexus, quanto vendemos?" */
         const lf=latestFinal.toLowerCase();
         const after=lf.indexOf(w)>=0?latestFinal.slice(lf.indexOf(w)+w.length).replace(/^[,.!?\s]+/,'').trim():'';
         if(after.length>3){beginThink(after);}
         else{capturing=true;capBuffer='';setState('listening');whoosh();showCaption('Pode falar…');resetCapTimer();}
       }
-    }else{
+}else{
       if(interim)showCaption(interim,'user');
-      if(latestFinal){capBuffer+=latestFinal;
-        const q=capBuffer.trim();
-        if(q.length>1)beginThink(q);else resetCapTimer();
+      if(latestFinal){
+        /* remove a palavra de ativação (e variações) se vier repetida */
+        const fuzzy=[wakeWord(),'jarvis','jarves','jovens','gervis','jervis','jarbas'];
+        let cleaned=latestFinal;
+        for(const f of fuzzy){
+          const i=cleaned.toLowerCase().indexOf(f);
+          if(i>=0)cleaned=cleaned.slice(0,i)+cleaned.slice(i+f.length);
+        }
+        cleaned=cleaned.replace(/^[,.!?\s]+/,'').trim();
+        if(cleaned.length>2){
+          capBuffer=(capBuffer+' '+cleaned).trim();
+          beginThink(capBuffer);
+        }else{
+          resetCapTimer(); /* só a wake word repetida: continua esperando a pergunta */
+        }
       }
     }
   };
-  rec.onend=()=>{if(wakeActive&&!suppress)setTimeout(tryStart,300);};
+  rec.onend=()=>{
+  console.log('[rec.onend] cap:',capturing);
+  if(wakeActive&&!suppress){setTimeout(tryStart,300);}
+};
   rec.onerror=ev=>{
     if(ev.error==='not-allowed'){
       wakeActive=false;micBtn.classList.remove('live');
@@ -843,7 +868,7 @@ async function speak(text,onDone){
 
 /* ============ CÉREBRO ============ */
 /* fontes de dados: configuradas no servidor (server.js + .env) */
-const SYSTEM=`Você é NEXUS, o assistente pessoal de negócios do Marlos, dono do Grupo MH (MH Cálculos Judiciais, Nexus ecossistema pericial, AnyCalc). Regras:
+const SYSTEM=`Você é Jarvis, o assistente pessoal de negócios do Marlos, dono do Grupo MH (MH Cálculos, Peritos Academy, AnyCalc). Regras:
 - Responda SEMPRE em português do Brasil.
 - Suas respostas serão lidas em voz alta: seja direto, natural e conciso (2 a 6 frases). Nada de listas, markdown ou links — fale como uma pessoa.
 - Tenha personalidade: confiante, levemente espirituoso quando couber, sem ser forçado. Vá direto ao ponto como um braço direito competente.
@@ -852,11 +877,11 @@ const SYSTEM=`Você é NEXUS, o assistente pessoal de negócios do Marlos, dono 
 - Se uma ferramenta falhar, diga isso em uma frase e sugira o caminho.
 
 == DADOS FINANCEIROS ==
-Quando os dados financeiros vierem junto na mensagem (entre colchetes [DADOS:...]), use-os para responder com precisão. As empresas do grupo são: MH Cálculos Judiciais, Nexus (ecossistema pericial) e AnyCalc. Sempre que falar de valores, diga de qual empresa é.`;
+Quando os dados financeiros vierem junto na mensagem (entre colchetes [DADOS:...]), use-os para responder com precisão. As empresas do grupo são: MH Cálculos, Peritos Academy e AnyCalc. Sempre que falar de valores, diga de qual empresa é.`;
 
 let history=[];
 const caption=document.getElementById('caption');
-const logEl=document.getElementById('log');
+const logEl=document.getElementById('log')||document.createElement('div');
 
 function showCaption(text,who){
   caption.innerHTML=(who==='user'?'<span class="you">Você</span>':'')+text.replace(/</g,'&lt;');
@@ -864,7 +889,7 @@ function showCaption(text,who){
 function addLog(who,text){
   const d=document.createElement('div');
   d.className='msg '+who;
-  d.innerHTML=`<span class="who">${who==='user'?'Você':'Nexus'}</span>${text.replace(/</g,'&lt;')}`;
+  d.innerHTML=`<span class="who">${who==='user'?'Você':'Jarvis'}</span>${text.replace(/</g,'&lt;')}`;
   logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;
 }
 
@@ -942,7 +967,6 @@ async function ask(text){
 document.getElementById('send').onclick=()=>ask(document.getElementById('textIn').value.trim());
 document.getElementById('textIn').addEventListener('keydown',e=>{if(e.key==='Enter')ask(e.target.value.trim());});
 document.getElementById('gear').onclick=()=>document.getElementById('panel').classList.toggle('open');
-document.getElementById('logToggle').onclick=()=>logEl.classList.toggle('open');
 
 const PALETTES={
   blue:{deep:[0.01,0.05,0.28],mid:[0.08,0.35,1.0],hot:[0.55,0.85,1.0],white:[1,1,1],

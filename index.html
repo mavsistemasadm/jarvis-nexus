@@ -12,7 +12,6 @@
 <div id="boot"><div class="spark"></div><div class="t">N E X U S</div><div class="s">toque para ativar</div></div>
 
 <div id="hud-top">
-  <div class="brand">NEXUS<small>assistente xperiun</small></div>
   <div id="status"><span class="dot"></span><span id="statusText">inicializando</span></div>
 </div>
 
@@ -45,15 +44,12 @@
     <label style="margin-top:8px"><input type="checkbox" id="ttsOn" checked> Responder por voz</label>
     <label><input type="checkbox" id="sfxOn" checked> Efeitos sonoros</label>
     <label style="margin-top:8px;display:block">Palavra de ativação
-      <input type="text" id="wakeWord" value="Nexus" style="width:100%;margin-top:4px;background:#071226;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;font-size:12px">
+      <input type="text" id="wakeWord" value="Jarvis" style="width:100%;margin-top:4px;background:#071226;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;font-size:12px">
     </label>
     <select id="palSel" style="margin-top:8px"><option value="thermal">Paleta: térmica (esquenta ao falar)</option><option value="blue">Paleta: azul cósmico</option><option value="fire">Paleta: fogo solar</option></select>
   </div>
   <div class="hint">Menos fontes ativas = respostas mais rápidas.</div>
 </div>
-
-<button id="logToggle">HISTÓRICO</button>
-<div id="log"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="js/app.js"></script>
