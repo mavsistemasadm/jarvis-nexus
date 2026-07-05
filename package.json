@@ -1,5 +1,5 @@
 {
-  "name": "nexus-xperiun",
+  "name": "jarvis-nexus",
   "version": "1.0.0",
   "description": "NEXUS — assistente de voz estilo Jarvis com visual de supernova, conectado aos dados de negócio via Claude API",
   "main": "server.js",

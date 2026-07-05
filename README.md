@@ -1,4 +1,4 @@
-# NEXUS — Assistente Xperiun
+# NEXUS — Assistente Nexus
 
 Assistente de voz estilo Jarvis com visual de supernova 3D (Three.js + shaders + bloom),
 ativação por palavra ("Nexus"), respostas por voz em pt-BR, busca na web e fontes de

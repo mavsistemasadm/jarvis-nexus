@@ -775,8 +775,7 @@ if(heard.indexOf(w)>=0||fuzzy.some(f=>heard.indexOf(f)>=0)){
     }
   };
   rec.onend=()=>{
-  console.log('[rec.onend] cap:',capturing);
-  if(wakeActive&&!suppress){setTimeout(tryStart,300);}
+      if(wakeActive&&!suppress){setTimeout(tryStart,300);}
 };
   rec.onerror=ev=>{
     if(ev.error==='not-allowed'){
