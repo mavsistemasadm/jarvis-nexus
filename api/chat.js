@@ -38,9 +38,38 @@ async function deactivateRoutine(userId, searchText) {
   return r.json();
 }
 
+/* ---- lançamento de despesa/receita no Financeiro MH ---- */
+async function lancarMovimentacao(l) {
+  const FIN_URL = process.env.FIN_TEST_URL || process.env.FINANCEIRO_SUPABASE_URL;
+  const FIN_KEY = process.env.FINANCEIRO_SUPABASE_KEY;
+  const FIN_EMAIL = process.env.FINANCEIRO_USER_EMAIL;
+  if (!FIN_URL || !FIN_KEY || !FIN_EMAIL) return { erro: 'financeiro não configurado' };
+  const r = await fetch(`${FIN_URL}/rest/v1/rpc/lancar_movimentacao`, {
+    method: 'POST',
+    headers: { 'apikey': FIN_KEY, 'authorization': `Bearer ${FIN_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      p_email: FIN_EMAIL,
+      p_tipo: l.tipo || 'Despesa',
+      p_empresa: l.empresa,
+      p_descricao: l.descricao,
+      p_valor: l.valor,
+      p_data: l.data || null,
+      p_vencimento: l.vencimento || null,
+      p_categoria: l.categoria || null,
+      p_centro: l.centro || null,
+      p_produto: l.produto || null,
+      p_pago: !!l.pago,
+      p_data_pagamento: l.data_pagamento || null,
+      p_banco: l.banco || null,
+      p_forma: l.forma_pagamento || null
+    })
+  });
+  return r.json();
+}
+
 /* ---- briefing do dia: puxa os números direto do Financeiro MH ---- */
 async function buildBriefing() {
-  const FIN_URL = process.env.FINANCEIRO_SUPABASE_URL;
+  const FIN_URL = process.env.FIN_TEST_URL || process.env.FINANCEIRO_SUPABASE_URL;
   const FIN_KEY = process.env.FINANCEIRO_SUPABASE_KEY;
   const FIN_EMAIL = process.env.FINANCEIRO_USER_EMAIL;
   if (!FIN_URL || !FIN_KEY || !FIN_EMAIL) return '';
@@ -95,14 +124,12 @@ module.exports = async (req, res) => {
               + memories.map(m => `- [${m.category}] ${m.content}`).join('\n');
           }
 
-          /* rotinas: sempre no contexto, pra listar/remover por voz */
           const routines = await getAllRoutines(user.id);
           if (routines && routines.length) {
             routineBlock = '\n\n== ROTINAS ATIVAS DO USUÁRIO ==\n'
               + routines.map(r => `- [${r.trigger_type}] ${r.action}`).join('\n');
           }
 
-          /* primeira conversa do dia: briefing + executar rotinas first_of_day */
           const firstOfDay = await db.isFirstOfDay(user.id);
           if (firstOfDay) {
             const dados = await buildBriefing();
@@ -142,7 +169,19 @@ ação: descrição curta do que fazer
 Por enquanto o único trigger suportado é first_of_day (primeira conversa do dia).
 Quando ele pedir para remover/cancelar uma rotina, confirme E adicione:
 <routine_delete>palavra-chave da rotina a remover</routine_delete>
-Se ele perguntar quais rotinas tem, responda com base na lista de ROTINAS ATIVAS acima.`;
+Se ele perguntar quais rotinas tem, responda com base na lista de ROTINAS ATIVAS acima.
+
+== INSTRUÇÕES DE LANÇAMENTO FINANCEIRO ==
+O usuário pode lançar despesas e receitas por voz (ex.: "lança 200 reais de almoço na MH Cálculos").
+Campos: tipo (Despesa/Receita), empresa (MH Cálculos, Peritos Academy ou AnyCalc), descricao, valor, categoria, data (padrão hoje), vencimento (padrão = data), centro de custo e produto (opcionais), pago (se já foi pago: data_pagamento, banco, forma_pagamento).
+Fluxo OBRIGATÓRIO em duas etapas:
+1) Quando ele ditar um lançamento, colete o que falta perguntando de forma natural (pergunte pelo menos categoria se não disse, e se já foi pago). Depois REPITA o resumo completo e pergunte "Confirma?". NUNCA emita a tag nesta etapa.
+2) SOMENTE quando ele confirmar explicitamente (sim/confirma/pode lançar), responda confirmando E adicione o bloco invisível:
+<lancamento_criar>
+{"tipo":"Despesa","empresa":"MH Cálculos","descricao":"Almoço","valor":200,"data":"2026-07-05","vencimento":"2026-07-05","categoria":"Alimentação","centro":"","produto":"","pago":true,"data_pagamento":"2026-07-05","banco":"Nubank","forma_pagamento":"Pix"}
+</lancamento_criar>
+Use a data de hoje quando ele disser "hoje". Valores sempre numéricos (200, não "duzentos").
+Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima versão e ofereça lançar avulso.`;
 
     const mcp_servers = [];
     for (const key of sources) {
@@ -160,7 +199,7 @@ Se ele perguntar quais rotinas tem, responda com base na lista de ROTINAS ATIVAS
     const headers = { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01' };
     if (mcp_servers.length) headers['anthropic-beta'] = 'mcp-client-2025-04-04';
 
-    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(payload) });
+    const r = await fetch(process.env.ANTHROPIC_TEST_URL || 'https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(payload) });
     const data = await r.json();
 
     if (data.content) {
@@ -170,12 +209,14 @@ Se ele perguntar quais rotinas tem, responda com base na lista de ROTINAS ATIVAS
       const mems = [...fullAnswer.matchAll(/<memory_extract>\s*categoria:\s*(.+?)\s*conteúdo:\s*(.+?)\s*<\/memory_extract>/gs)];
       const rcs  = [...fullAnswer.matchAll(/<routine_create>\s*trigger:\s*(.+?)\s*ação:\s*(.+?)\s*<\/routine_create>/gs)];
       const rds  = [...fullAnswer.matchAll(/<routine_delete>\s*(.+?)\s*<\/routine_delete>/gs)];
+      const lans = [...fullAnswer.matchAll(/<lancamento_criar>\s*([\s\S]+?)\s*<\/lancamento_criar>/g)];
 
       /* 2º: limpar a resposta SEMPRE, antes de qualquer efeito no banco */
       const cleanAnswer = fullAnswer
         .replace(/<memory_extract>[\s\S]*?<\/memory_extract>/g, '')
         .replace(/<routine_create>[\s\S]*?<\/routine_create>/g, '')
         .replace(/<routine_delete>[\s\S]*?<\/routine_delete>/g, '')
+        .replace(/<lancamento_criar>[\s\S]*?<\/lancamento_criar>/g, '')
         .trim();
       data.content = [{ type: 'text', text: cleanAnswer }];
 
@@ -194,8 +235,23 @@ Se ele perguntar quais rotinas tem, responda com base na lista de ROTINAS ATIVAS
           catch (e) { console.warn('[nexus] rotina não removida:', e.message); }
         }
       }
+
+      /* lançamentos financeiros confirmados */
+      for (const m of lans) {
+        try {
+          const l = JSON.parse(m[1]);
+          const result = await lancarMovimentacao(l);
+          if (result && result.erro) throw new Error(result.erro);
+          if (result && result.message) throw new Error(result.message);
+          console.log('[nexus] lançamento gravado:', l.descricao, l.valor);
+        } catch (e) {
+          console.error('[nexus] lançamento FALHOU:', e.message);
+          data.content = [{ type: 'text', text: 'Atenção: não consegui gravar o lançamento no financeiro. Erro: ' + e.message + '. Nada foi salvo — tenta de novo ou lança manualmente.' }];
+        }
+      }
+
       if (session && session.id) {
-        try { await db.saveMessage(session.id, 'assistant', cleanAnswer); }
+        try { await db.saveMessage(session.id, 'assistant', data.content[0].text); }
         catch (e) { console.warn('[nexus] histórico não salvo:', e.message); }
       }
     }

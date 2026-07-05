@@ -46,6 +46,12 @@ module.exports = async (req, res) => {
       case 'fluxo_diario':
         data = await callFn('fluxo_diario', ano_mes ? { p_ano_mes: ano_mes } : {});
         break;
+      case 'movimentacoes_mes':
+        data = await callFn('movimentacoes_mes', { ...(ano_mes ? { p_ano_mes: ano_mes } : {}), p_limit: limit || 40 });
+        break;
+      case 'lancar':
+        data = await callFn('lancar_movimentacao', req.body.lancamento || {});
+        break;
       case 'listar_empresas':
         data = await callFn('listar_empresas');
         break;
