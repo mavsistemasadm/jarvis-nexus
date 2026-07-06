@@ -26,6 +26,7 @@ const apiFinanceiro = require('./api/financeiro');
 const apiHistory = require('./api/history');
 const apiSpotify = require('./api/spotify');
 const apiFacebook = require('./api/facebook');
+const apiMake = require('./api/make');
 
 function parseBody(req) {
   return new Promise((resolve) => {
@@ -84,6 +85,7 @@ http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/api/history') return wrapHandler(apiHistory)(req, res);
   if (req.url.startsWith('/api/spotify')) return wrapHandler(apiSpotify)(req, res);
   if (req.method === 'POST' && req.url === '/api/facebook') return wrapHandler(apiFacebook)(req, res);
+  if (req.method === 'POST' && req.url === '/api/make') return wrapHandler(apiMake)(req, res);
   if (req.url === '/favicon.ico') { res.writeHead(204); return res.end(); }
   serveStatic(req, res);
 }).on('error', e => {

@@ -706,8 +706,8 @@ if(SR){
   micBtn.title='Reconhecimento de voz não suportado — use o texto.';
 }
 /* ===== escuta contínua: acorda com a palavra de ativação ===== */
-let wakeActive=false,capturing=false,capBuffer='',capTimer=null,suppress=false;
-function wakeWord(){return (document.getElementById('wakeWord').value||'jarvis').trim().toLowerCase();}
+let wakeActive=false,capturing=false,capBuffer='',capTimer=null,sendTimer=null,suppress=false;
+function wakeWord(){return (document.getElementById('wakeWord').value||'nexus').trim().toLowerCase();}
 function idleHint(){showCaption('Diga "'+document.getElementById('wakeWord').value+'" para me chamar.');}
 function tryStart(){if(!rec||!wakeActive||suppress)return;try{rec.start();}catch(e){}}
 function startWake(){if(!rec)return;wakeActive=true;micBtn.classList.add('live');tryStart();}
@@ -716,12 +716,14 @@ function resetCapTimer(){
   capTimer=setTimeout(()=>{if(capturing){capturing=false;setState('idle');idleHint();}},7000);
 }
 function beginThink(q){
-  clearTimeout(capTimer);capturing=false;capBuffer='';
+  clearTimeout(capTimer);clearTimeout(sendTimer);capturing=false;capBuffer='';
   suppress=true;try{rec.stop();}catch(e){}
   ask(q);
 }
 window.resumeWake=function(){
   suppress=false;
+  /* música tocando: sem modo conversa, só acorda com a wake word */
+  if(window.__music){window.__music=false;setState('idle');return;}
   /* modo conversa: 8s de escuta aberta pra emendar a próxima pergunta */
   capturing=true;capBuffer='';
   setState('listening');
@@ -733,7 +735,6 @@ setInterval(()=>{
   if(!rec||!wakeActive||suppress)return;
   try{rec.start();}catch(e){}
 },2000);
-
 if(rec){
   rec.continuous=true;
   rec.onresult=e=>{
@@ -742,41 +743,51 @@ if(rec){
       const tr=e.results[i][0].transcript;
       if(e.results[i].isFinal)latestFinal+=tr;else interim+=tr;
     }
-const heard=(latestFinal||interim).toLowerCase();    
-
-if(!capturing){
+    const heard=(latestFinal||interim).toLowerCase();
+    if(!capturing){
       const w=wakeWord();
       const fuzzy=['jarvis','jarves','jovens','gervis','jervis','jarbas'];
-if(heard.indexOf(w)>=0||fuzzy.some(f=>heard.indexOf(f)>=0)){
+      if(heard.indexOf(w)>=0||fuzzy.some(f=>heard.indexOf(f)>=0)){
         /* comando emendado na mesma frase: "nexus, quanto vendemos?" */
         const lf=latestFinal.toLowerCase();
         const after=lf.indexOf(w)>=0?latestFinal.slice(lf.indexOf(w)+w.length).replace(/^[,.!?\s]+/,'').trim():'';
-        if(after.length>3){beginThink(after);}
+        if(after.length>3){
+          capturing=true;capBuffer=after;setState('listening');
+          showCaption(capBuffer,'user');
+          resetCapTimer();clearTimeout(sendTimer);
+          sendTimer=setTimeout(()=>{
+            if(capturing&&capBuffer.trim().length>1)beginThink(capBuffer.trim());
+          },1400);
+        }
         else{capturing=true;capBuffer='';setState('listening');whoosh();showCaption('Pode falar…');resetCapTimer();}
       }
-}else{
-      if(interim)showCaption(interim,'user');
+    }else{
+      if(interim){
+        showCaption(capBuffer?capBuffer+' '+interim:interim,'user');
+        resetCapTimer();clearTimeout(sendTimer);
+      }
       if(latestFinal){
-        /* remove a palavra de ativação (e variações) se vier repetida */
-        const fuzzy=[wakeWord(),'jarvis','jarves','jovens','gervis','jervis','jarbas'];
+        const fz=[wakeWord(),'jarvis','jarves','jovens','gervis','jervis','jarbas'];
         let cleaned=latestFinal;
-        for(const f of fuzzy){
+        for(const f of fz){
           const i=cleaned.toLowerCase().indexOf(f);
           if(i>=0)cleaned=cleaned.slice(0,i)+cleaned.slice(i+f.length);
         }
         cleaned=cleaned.replace(/^[,.!?\s]+/,'').trim();
         if(cleaned.length>2){
           capBuffer=(capBuffer+' '+cleaned).trim();
-          beginThink(capBuffer);
+          showCaption(capBuffer,'user');
+          resetCapTimer();clearTimeout(sendTimer);
+          sendTimer=setTimeout(()=>{
+            if(capturing&&capBuffer.trim().length>1)beginThink(capBuffer.trim());
+          },1400);
         }else{
-          resetCapTimer(); /* só a wake word repetida: continua esperando a pergunta */
+          resetCapTimer();
         }
       }
     }
   };
-  rec.onend=()=>{
-      if(wakeActive&&!suppress){setTimeout(tryStart,300);}
-};
+  rec.onend=()=>{if(wakeActive&&!suppress)setTimeout(tryStart,300);};
   rec.onerror=ev=>{
     if(ev.error==='not-allowed'){
       wakeActive=false;micBtn.classList.remove('live');
@@ -869,7 +880,7 @@ async function speak(text,onDone){
 
 /* ============ CÉREBRO ============ */
 /* fontes de dados: configuradas no servidor (server.js + .env) */
-const SYSTEM=`Você é Jarvis, o assistente pessoal de negócios do Marlos, dono do Grupo MH (MH Cálculos, Peritos Academy, AnyCalc). Regras:
+const SYSTEM=`Você é NEXUS, o assistente pessoal de negócios do Marlos, dono do Grupo MH (MH Cálculos, Peritos Academy, AnyCalc). Regras:
 - Responda SEMPRE em português do Brasil.
 - Suas respostas serão lidas em voz alta: seja direto, natural e conciso (2 a 6 frases). Nada de listas, markdown ou links — fale como uma pessoa.
 - Tenha personalidade: confiante, levemente espirituoso quando couber, sem ser forçado. Vá direto ao ponto como um braço direito competente.
@@ -890,7 +901,7 @@ function showCaption(text,who){
 function addLog(who,text){
   const d=document.createElement('div');
   d.className='msg '+who;
-  d.innerHTML=`<span class="who">${who==='user'?'Você':'Jarvis'}</span>${text.replace(/</g,'&lt;')}`;
+  d.innerHTML=`<span class="who">${who==='user'?'Você':'Nexus'}</span>${text.replace(/</g,'&lt;')}`;
   logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;
 }
 
@@ -915,8 +926,7 @@ async function ask(text){
       if(/meta/i.test(text))actions.push({action:'faturamento_vs_meta'});
       if(/despes|gast/i.test(text))actions.push({action:'top_despesas'});
       if(/fluxo/i.test(text))actions.push({action:'fluxo_diario'});
-      if(/quais|detalh|categoria|extrato|lista|o que|movimenta/i.test(text))actions.push({action:'movimentacoes_mes'});
-      if(actions.length===0){actions.push({action:'resumo_mensal'});actions.push({action:'top_despesas'});}
+      if(actions.length===0)actions.push({action:'resumo_mensal'});
       for(const a of actions){
         const fr=await fetch('/api/financeiro',{
           method:'POST',
@@ -944,7 +954,6 @@ async function ask(text){
 
   const lastMsg=history[history.length-1];
   const enrichedHistory=finData
-  
     ?[...history.slice(0,-1),{role:'user',content:lastMsg.content+finData}]
     :history;
 
@@ -967,6 +976,7 @@ async function ask(text){
     const answer=(data.content||[])
       .filter(b=>b.type==='text')
       .map(b=>b.text).join('\n').trim()||'Não consegui gerar uma resposta agora.';
+    window.__music=!!data.musica;
     history.push({role:'assistant',content:answer});
     showCaption(answer);addLog('assistant',answer);
     speak(answer,window.resumeWake);
@@ -983,6 +993,7 @@ async function ask(text){
 document.getElementById('send').onclick=()=>ask(document.getElementById('textIn').value.trim());
 document.getElementById('textIn').addEventListener('keydown',e=>{if(e.key==='Enter')ask(e.target.value.trim());});
 document.getElementById('gear').onclick=()=>document.getElementById('panel').classList.toggle('open');
+if(document.getElementById('logToggle'))document.getElementById('logToggle').onclick=()=>logEl.classList.toggle('open');
 
 const PALETTES={
   blue:{deep:[0.01,0.05,0.28],mid:[0.08,0.35,1.0],hot:[0.55,0.85,1.0],white:[1,1,1],

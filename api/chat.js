@@ -67,6 +67,16 @@ async function lancarMovimentacao(l) {
   return r.json();
 }
 
+/* ---- Make: automações por voz ---- */
+const makeMod = require('./make');
+function makeHooksBlock() {
+  const hs = makeMod.hooks();
+  if (!hs.length) return '';
+  return '\n\n== AUTOMAÇÕES DISPONÍVEIS (MAKE) ==\n'
+    + hs.map(h => `- ${h.nome}: ${h.descricao}`).join('\n')
+    + '\nQuando o usuário pedir uma dessas ações, confirme naturalmente E adicione o bloco invisível:\n<make_disparar>\n{"nome":"nomedaacao","dados":{"campo":"valor"}}\n</make_disparar>\nPreencha "dados" com as informações que ele ditou (nomes de campos simples em minúsculas). Se faltar informação essencial, pergunte antes.';
+}
+
 /* ---- Spotify por voz ---- */
 async function spotifyAcao(acao, busca) {
   try {
@@ -164,6 +174,7 @@ module.exports = async (req, res) => {
     }
 
     const enrichedSystem = system
+      + makeHooksBlock()
       + memoryBlock
       + routineBlock
       + briefingBlock
@@ -233,6 +244,7 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
       const lans = [...fullAnswer.matchAll(/<lancamento_criar>\s*([\s\S]+?)\s*<\/lancamento_criar>/g)];
       const spls = [...fullAnswer.matchAll(/<spotify_play>\s*(.+?)\s*<\/spotify_play>/gs)];
       const spcs = [...fullAnswer.matchAll(/<spotify_ctrl>\s*(.+?)\s*<\/spotify_ctrl>/gs)];
+      const mks  = [...fullAnswer.matchAll(/<make_disparar>\s*([\s\S]+?)\s*<\/make_disparar>/g)];
 
       /* 2º: limpar a resposta SEMPRE, antes de qualquer efeito no banco */
       const cleanAnswer = fullAnswer
@@ -242,6 +254,7 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
         .replace(/<lancamento_criar>[\s\S]*?<\/lancamento_criar>/g, '')
         .replace(/<spotify_play>[\s\S]*?<\/spotify_play>/g, '')
         .replace(/<spotify_ctrl>[\s\S]*?<\/spotify_ctrl>/g, '')
+        .replace(/<make_disparar>[\s\S]*?<\/make_disparar>/g, '')
         .trim();
       data.content = [{ type: 'text', text: cleanAnswer }];
 
@@ -274,11 +287,24 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
         }
       }
 
+      /* Make: dispara automações confirmadas */
+      for (const m of mks) {
+        try {
+          const cmd = JSON.parse(m[1]);
+          const r = await makeMod.disparar(cmd.nome, cmd.dados || {});
+          if (r && r.erro) throw new Error(r.erro);
+          console.log('[nexus] automação disparada:', cmd.nome);
+        } catch (e) {
+          console.error('[nexus] automação FALHOU:', e.message);
+          data.content = [{ type: 'text', text: 'Não consegui disparar a automação: ' + e.message }];
+        }
+      }
+
       /* Spotify */
       for (const m of spls) {
         const r = await spotifyAcao('tocar', m[1].trim());
         if (r && r.erro) data.content = [{ type: 'text', text: 'Não consegui tocar: ' + r.erro }];
-        else if (r && r.tocando) console.log('[nexus] tocando:', r.tocando);
+        else if (r && r.tocando) { console.log('[nexus] tocando:', r.tocando); data.musica = true; }
       }
       for (const m of spcs) {
         const r = await spotifyAcao(m[1].trim());
