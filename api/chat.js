@@ -67,6 +67,10 @@ async function lancarMovimentacao(l) {
   return r.json();
 }
 
+/* ---- Consulta aos negócios (financeiro, opera, peritos) ---- */
+let negocios = null;
+try { negocios = require('./negocios'); } catch (e) { console.warn('[nexus] negocios não disponível:', e.message); }
+
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
 function makeHooksBlock() {
@@ -88,6 +92,23 @@ async function spotifyAcao(acao, busca) {
       sp(req, res).catch(e => resolve({ erro: String(e.message || e) }));
     });
   } catch (e) { return { erro: String(e.message || e) }; }
+}
+
+/* ---- contexto temporal: o modelo não tem relógio ----
+   Sem isso ele chuta "bom dia" às onze da noite. O período vem calculado
+   daqui, no fuso de Brasília, não inferido de um timestamp cru. */
+function contextoTemporal() {
+  const agora = new Date();
+  const emSP = (opt) => agora.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...opt });
+  const hora = Number(agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false })) % 24;
+  const periodo = hora < 12 ? 'manhã' : hora < 18 ? 'tarde' : 'noite';
+  return {
+    hora,
+    periodo,
+    saudacao: hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite',
+    data: emSP({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+    relogio: emSP({ hour: '2-digit', minute: '2-digit' })
+  };
 }
 
 /* ---- briefing do dia: puxa os números direto do Financeiro MH ---- */
@@ -173,11 +194,48 @@ module.exports = async (req, res) => {
       }
     }
 
+    /* Saudação de abertura: só na PRIMEIRA fala da sessão.
+       `messages` vem do front com o histórico inteiro, então tamanho 1
+       significa que a conversa está começando agora. Fora do bloco do
+       Supabase de propósito — o cumprimento não pode depender da memória
+       estar configurada. */
+    const t = contextoTemporal();
+    let saudacaoBlock = `\n\n== AGORA ==\nSão ${t.relogio} de ${t.data} (período da ${t.periodo}), horário de Brasília.`;
+
+    if (messages.length === 1) {
+      /* O mordomo entra já sabendo o que pega fogo, em vez de esperar ser
+         perguntado. Roda só na abertura — não a cada frase — e se falhar,
+         a conversa começa normalmente sem ele. */
+      let vigiaBlock = '';
+      if (negocios && process.env.NEXUS_VIGIA_NA_ABERTURA !== '0') {
+        try {
+          const vigia = require('./vigia');
+          const r = await vigia.avaliar();
+          if (r.alertas.length) {
+            const urgentes = r.alertas.filter(a => a.severidade === 'urgente');
+            vigiaBlock = `\n\nO que está pedindo atenção neste momento (você levantou isso sozinho, não foi pedido):\n${vigia.resumir(r)}\n`
+              + (urgentes.length
+                ? 'Mencione o(s) ponto(s) urgente(s) logo na abertura, em UMA frase, do jeito que um mordomo avisaria — sem alarde e sem listar tudo. O resto só se ele perguntar.'
+                : 'Nada urgente. NÃO despeje esses itens na abertura; guarde para quando ele perguntar.');
+          }
+        } catch (e) { console.warn('[nexus] vigia indisponível na abertura:', e.message); }
+      }
+
+      saudacaoBlock += vigiaBlock + `\n\n== ABERTURA DA SESSÃO ==
+Esta é a primeira fala desta sessão. Antes de responder o que ele pediu, abra como o mordomo que você é, nesta ordem e em poucas frases:
+1) Cumprimente com "${t.saudacao}" e o nome dele. Varie o jeito a cada sessão — nunca repita a mesma fórmula duas vezes seguidas.
+2) Pergunte se está tudo certo com ele.
+3) Pergunte qual música ele quer para ${t.periodo === 'manhã' ? 'começar o dia' : t.periodo === 'tarde' ? 'embalar a tarde' : 'fechar a noite'}.
+Se ele responder com um artista ou música, use a tag do Spotify normalmente.
+Só depois disso responda o que ele perguntou. Tudo junto, natural, sem soar protocolar nem virar lista — é uma pessoa falando.`;
+    }
+
     const enrichedSystem = system
       + makeHooksBlock()
       + memoryBlock
       + routineBlock
       + briefingBlock
+      + saudacaoBlock
       + `\n\n== INSTRUÇÕES DE MEMÓRIA ==
 Se o usuário compartilhar informações pessoais importantes (preferências, dados da empresa, metas, gostos, rotinas), responda normalmente E adicione ao final da sua resposta, invisível ao usuário, um bloco:
 <memory_extract>
@@ -209,11 +267,51 @@ Fluxo OBRIGATÓRIO em duas etapas:
 Use a data de hoje quando ele disser "hoje". Valores sempre numéricos (200, não "duzentos").
 Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima versão e ofereça lançar avulso.
 
+== INSTRUÇÕES DE CONFIRMAÇÃO DE PAGAMENTO ==
+O usuário pode dar baixa numa conta por voz ("paga o Supabase", "marca a Vercel como paga").
+Fluxo OBRIGATÓRIO em duas etapas, igual ao lançamento:
+1) Consulte financeiro_contas para achar a conta e CONFIRA em voz alta descrição, empresa, valor e vencimento. Pergunte "Confirma a baixa?". NUNCA emita a tag nesta etapa.
+2) Só depois do sim explícito, responda confirmando E adicione o bloco invisível:
+<pagamento_confirmar>
+{"descricao":"Supabase","valor":150.21,"data_pagamento":"2026-08-15","banco":"Nubank","forma_pagamento":"Pix"}
+</pagamento_confirmar>
+A "descricao" precisa bater com UMA única conta em aberto. Se o servidor responder que mais de uma bateu, peça o valor exato e tente de novo. Data de pagamento padrão é hoje.
+
+== INSTRUÇÕES DE AGENDA (OPERA) ==
+O usuário pode marcar compromissos por voz ("marca audiência dia 22 às 14h", "põe na agenda a entrega do laudo do Pedro dia 20").
+Campos: titulo e data (AAAA-MM-DD) são obrigatórios; hora (HH:MM, omita se for o dia todo), local, alerta_dias (avisar N dias antes) e tipo.
+Tipos válidos: entrega_laudo, entrega_quesitos, prazo_fatal, audiencia, reuniao, diligencia, prazo_processo, followup, outro.
+Colete o que faltar, repita o resumo, pergunte "Confirma?" e SÓ depois do sim adicione:
+<agenda_criar>
+{"tipo":"audiencia","titulo":"Audiência processo Pedro Bernardo","data":"2026-08-22","hora":"14:00","local":"Fórum de Joinville","alerta_dias":2}
+</agenda_criar>
+
+== INSTRUÇÕES DE CÁLCULO JUDICIAL (OPERA) ==
+O usuário pode abrir um processo/cálculo por voz. Siga a MESMA ordem das três etapas da tela, uma pergunta de cada vez:
+1) Atuação: ele é perito do juízo ou perito contratado? (esta é sempre a primeira pergunta — ela define todo o resto)
+2) Dados: tipo de cálculo, número do processo (se não tiver, vira pré-judicial), vara, tribunal, comarca, valor da causa, e o cliente/contato.
+3) Prazos e honorários: prazo de entrega, data de nomeação, tipo de honorário (fixo, hora, exito ou misto), valor, e se tem depósito judicial.
+Tipos de cálculo: Cálculos Cíveis, Bancários, Trabalhistas, Previdenciários, Tributários, Contábeis, Atuariais.
+Só atuação e tipo_acao são obrigatórios — o resto ele pode completar depois na tela; não trave a conversa por um campo opcional.
+NUNCA pergunte o status: ele é derivado da atuação automaticamente.
+Repita o resumo, pergunte "Confirma?" e só depois do sim adicione:
+<processo_criar>
+{"atuacao":"perito_contratado","tipo_acao":"Cálculos Trabalhistas","titulo":"Cálculo Maria Silva","numero":"","vara":"","comarca":"","valor_causa":null,"prazo_entrega":"2026-09-10","honorario_tipo":"fixo","honorario_valor":1500,"deposito_judicial":false,"contato_nome":"Maria Silva","contato_telefone":"","observacoes":""}
+</processo_criar>
+
 == INSTRUÇÕES DE MÚSICA (SPOTIFY) ==
 O usuário pode controlar o Spotify por voz. Quando ele pedir uma música/artista/banda (ex.: "toca AC/DC", "coloca uma do Metallica", ou responder a rotina da manhã com o nome de uma música), confirme naturalmente E adicione o bloco invisível:
 <spotify_play>nome do artista ou música</spotify_play>
 Para pausar: <spotify_ctrl>pause</spotify_ctrl> | continuar: <spotify_ctrl>play</spotify_ctrl> | próxima: <spotify_ctrl>next</spotify_ctrl> | anterior: <spotify_ctrl>previous</spotify_ctrl>
-Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado), o servidor avisa o usuário — você não precisa tratar.`;
+Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado), o servidor avisa o usuário — você não precisa tratar.
+
+== DADOS DO NEGÓCIO ==
+Você tem ferramentas que leem os sistemas reais do Grupo MH: financeiro (grupo-mh-financeiro), Opera/mh-gestao (processos, agenda, WhatsApp, comercial) e a plataforma Nexus/Peritos Academy (assinaturas).
+Marlos é o gestor do grupo — quando ele perguntar sobre números, prazos, clientes ou contas, CONSULTE a ferramenta em vez de responder de memória. Prefira uma consulta a mais do que um palpite.
+Regras que não se quebram:
+- Nunca invente ou estime um número de negócio. Se a ferramenta devolver um campo "erro", diga que a fonte falhou e o que você não conseguiu ler — não preencha a lacuna.
+- Se a ferramenta trouxer um campo "aviso" ou "nota", respeite-o: ele existe porque aquele dado engana.
+- Você está respondendo por voz. Traga os números que decidem, não a tabela inteira: dois ou três itens e o total, não a lista completa. Valores em reais falados por extenso e arredondados quando não mudar a decisão.`;
 
     const mcp_servers = [];
     for (const key of sources) {
@@ -224,15 +322,63 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
       mcp_servers.push({ type: 'url', url: s.url, name: s.name, authorization_token: token });
     }
 
-    const payload = { model: process.env.NEXUS_MODEL || 'claude-sonnet-4-6', max_tokens: 1000, system: enrichedSystem, messages };
-    if (mcp_servers.length) payload.mcp_servers = mcp_servers;
-    if (webSearch) payload.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
+    /* ferramentas de negócio: só entram as fontes que estão realmente
+       configuradas (ver api/negocios.js) */
+    const toolDefs = negocios ? negocios.ferramentasDisponiveis() : [];
+    const tools = [...toolDefs];
+    if (webSearch) tools.push({ type: 'web_search_20250305', name: 'web_search' });
 
     const headers = { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01' };
     if (mcp_servers.length) headers['anthropic-beta'] = 'mcp-client-2025-04-04';
 
-    const r = await fetch(process.env.ANTHROPIC_TEST_URL || 'https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(payload) });
-    const data = await r.json();
+    const url = process.env.ANTHROPIC_TEST_URL || 'https://api.anthropic.com/v1/messages';
+    const conversa = messages.slice();
+    let r, data;
+
+    /* Loop de tool use: o modelo pede o dado, o servidor busca, o modelo
+       responde. Sem isso o NEXUS só consegue ser mandado, nunca perguntado.
+       O teto de voltas evita que uma ferramenta em erro vire loop infinito. */
+    for (let volta = 0; volta < 6; volta++) {
+      const payload = {
+        model: process.env.NEXUS_MODEL || 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        system: enrichedSystem,
+        messages: conversa
+      };
+      if (mcp_servers.length) payload.mcp_servers = mcp_servers;
+      if (tools.length) payload.tools = tools;
+
+      r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+      data = await r.json();
+      if (!data || !Array.isArray(data.content)) break;
+
+      /* web_search estourou as iterações do servidor: devolve o turno e segue */
+      if (data.stop_reason === 'pause_turn') {
+        conversa.push({ role: 'assistant', content: data.content });
+        continue;
+      }
+      if (data.stop_reason !== 'tool_use') break;
+
+      const pedidos = data.content.filter(b => b.type === 'tool_use');
+      if (!pedidos.length) break;
+
+      /* executa em paralelo e devolve TODOS os resultados numa única
+         mensagem de usuário — dividir em várias ensina o modelo a parar
+         de pedir ferramentas em paralelo */
+      const resultados = await Promise.all(pedidos.map(async (p) => {
+        const saida = await negocios.executar(p.name, p.input);
+        console.log('[nexus] consulta:', p.name, JSON.stringify(p.input || {}));
+        return {
+          type: 'tool_result',
+          tool_use_id: p.id,
+          content: JSON.stringify(saida),
+          ...(saida && saida.erro ? { is_error: true } : {})
+        };
+      }));
+
+      conversa.push({ role: 'assistant', content: data.content });
+      conversa.push({ role: 'user', content: resultados });
+    }
 
     if (data.content) {
       const fullAnswer = data.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
@@ -245,6 +391,9 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
       const spls = [...fullAnswer.matchAll(/<spotify_play>\s*(.+?)\s*<\/spotify_play>/gs)];
       const spcs = [...fullAnswer.matchAll(/<spotify_ctrl>\s*(.+?)\s*<\/spotify_ctrl>/gs)];
       const mks  = [...fullAnswer.matchAll(/<make_disparar>\s*([\s\S]+?)\s*<\/make_disparar>/g)];
+      const pags = [...fullAnswer.matchAll(/<pagamento_confirmar>\s*([\s\S]+?)\s*<\/pagamento_confirmar>/g)];
+      const ags  = [...fullAnswer.matchAll(/<agenda_criar>\s*([\s\S]+?)\s*<\/agenda_criar>/g)];
+      const prcs = [...fullAnswer.matchAll(/<processo_criar>\s*([\s\S]+?)\s*<\/processo_criar>/g)];
 
       /* 2º: limpar a resposta SEMPRE, antes de qualquer efeito no banco */
       const cleanAnswer = fullAnswer
@@ -255,6 +404,9 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
         .replace(/<spotify_play>[\s\S]*?<\/spotify_play>/g, '')
         .replace(/<spotify_ctrl>[\s\S]*?<\/spotify_ctrl>/g, '')
         .replace(/<make_disparar>[\s\S]*?<\/make_disparar>/g, '')
+        .replace(/<pagamento_confirmar>[\s\S]*?<\/pagamento_confirmar>/g, '')
+        .replace(/<agenda_criar>[\s\S]*?<\/agenda_criar>/g, '')
+        .replace(/<processo_criar>[\s\S]*?<\/processo_criar>/g, '')
         .trim();
       data.content = [{ type: 'text', text: cleanAnswer }];
 
@@ -298,6 +450,27 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
           console.error('[nexus] automação FALHOU:', e.message);
           data.content = [{ type: 'text', text: 'Não consegui disparar a automação: ' + e.message }];
         }
+      }
+
+      /* Escritas confirmadas (baixa de conta, agenda, processo).
+         Mesmo contrato do lançamento: se falhar, a resposta vira o aviso —
+         é pior o Marlos achar que gravou do que ouvir que não gravou. */
+      const gravar = async (matches, rotulo, fn) => {
+        for (const m of matches) {
+          try {
+            const dados = JSON.parse(m[1]);
+            const r = await fn(dados);
+            console.log(`[nexus] ${rotulo} gravado:`, JSON.stringify(r).slice(0, 160));
+          } catch (e) {
+            console.error(`[nexus] ${rotulo} FALHOU:`, e.message);
+            data.content = [{ type: 'text', text: `Atenção: não consegui ${rotulo}. ${e.message}. Nada foi salvo.` }];
+          }
+        }
+      };
+      if (negocios) {
+        await gravar(pags, 'dar baixa na conta', d => negocios.escrever.confirmarPagamento(d));
+        await gravar(ags, 'marcar o compromisso', d => negocios.escrever.criarEvento(d));
+        await gravar(prcs, 'abrir o processo', d => negocios.escrever.criarProcesso(d));
       }
 
       /* Spotify */
