@@ -807,6 +807,20 @@ micBtn.onclick=()=>{
 /* Fallback: vozes do navegador caso ElevenLabs falhe */
 const voiceSel=document.getElementById('voiceSel');
 let voices=[];
+/* O NEXUS é mordomo: a voz é masculina. As femininas do pt-BR (Luciana,
+   Sandy, Shelley, Flo, Grandma) ficam de fora da escolha automática — a
+   Luciana é a padrão do macOS, e era ela que aparecia quando o ElevenLabs
+   caía, porque o fallback não achava voz nenhuma chamada "elevenlabs". */
+const VOZES_MASCULINAS=['Ricardo','Eddy','Reed','Rocko','Felipe','Daniel','Google português do Brasil','Grandpa'];
+const FEMININAS=/luciana|sandy|shelley|flo|grandma|joana|catarina|fernanda|helena/i;
+function vozMasculina(){
+  const pt=voices.filter(v=>v.lang&&v.lang.toLowerCase().startsWith('pt'));
+  for(const nome of VOZES_MASCULINAS){
+    const v=pt.find(v=>v.name.toLowerCase().includes(nome.toLowerCase()));
+    if(v)return v;
+  }
+  return pt.find(v=>!FEMININAS.test(v.name))||pt[0]||voices[0]||null;
+}
 function loadVoices(){
   voices=speechSynthesis.getVoices();
   const pt=voices.filter(v=>v.lang&&v.lang.toLowerCase().startsWith('pt'));
@@ -823,7 +837,12 @@ function stopAudio(){
   speechSynthesis.cancel();
 }
 
+/* Sem chave do ElevenLabs, /api/tts responde 500 em TODA fala. Depois da
+   primeira falha o caminho fica desligado pela sessão: evita uma requisição
+   condenada (e o atraso dela) antes de cada frase. */
+let elIndisponivel=false;
 async function speakEL(text){
+  if(elIndisponivel)return speakBrowser(text);
   return new Promise(async(resolve)=>{
     try{
       const r=await fetch('/api/tts',{
@@ -840,7 +859,8 @@ async function speakEL(text){
       audio.onerror=()=>{currentAudio=null;URL.revokeObjectURL(url);resolve();};
       audio.play();
     }catch(e){
-      console.warn('ElevenLabs falhou, usando navegador:',e);
+      elIndisponivel=true;
+      console.warn('ElevenLabs indisponível — usando voz do navegador a partir de agora:',e.message||e);
       speakBrowser(text).then(resolve);
     }
   });
@@ -854,7 +874,11 @@ function speakBrowser(text){
     const next=()=>{
       if(i>=parts.length){resolve();return;}
       const u=new SpeechSynthesisUtterance(parts[i++].trim());
-      const v=voices.find(v=>v.name===voiceSel.value);if(v)u.voice=v;
+      /* voiceSel pode valer "elevenlabs", que não é voz do navegador — nesse
+         caso (e em qualquer nome que não case) cai na masculina, nunca no
+         padrão do sistema */
+      const v=voices.find(v=>v.name===voiceSel.value)||vozMasculina();
+      if(v)u.voice=v;
       u.lang='pt-BR';u.rate=1.04;u.pitch=1.0;
       u.onend=next;u.onerror=next;
       speechSynthesis.speak(u);
@@ -992,8 +1016,19 @@ async function ask(text){
     showCaption(answer);addLog('assistant',answer);
     speak(answer,window.resumeWake);
   }catch(err){
-    console.error(err);
-    const msg='Tive um problema ao processar. Tente novamente ou desative algumas fontes de dados nas configurações.';
+    console.error('[nexus] falha no ask():',err);
+    /* A mensagem genérica escondia a causa: quem lia não sabia se era chave
+       faltando, tempo esgotado ou rede. Agora o motivo vai junto — falado e
+       na legenda —, porque diagnosticar sem o erro é adivinhação. */
+    const cru=String(err&&err.message||err);
+    let motivo='';
+    if(/Failed to fetch|NetworkError|Load failed/i.test(cru))       motivo='O servidor não respondeu. Ele está rodando?';
+    else if(/api[_ -]?key|authentication|401/i.test(cru))            motivo='A chave da API foi recusada.';
+    else if(/timeout|timed out|504|FUNCTION_INVOCATION_TIMEOUT/i.test(cru)) motivo='A resposta demorou demais e foi cortada.';
+    else if(/429|rate.?limit/i.test(cru))                            motivo='Limite de uso da API atingido.';
+    else if(/5\d\d/.test(cru))                                       motivo='O servidor respondeu com erro: '+cru;
+    else                                                             motivo=cru;
+    const msg='Tive um problema ao processar. '+motivo;
     showCaption(msg);addLog('assistant',msg);
     history.pop();
     speak(msg,window.resumeWake);
