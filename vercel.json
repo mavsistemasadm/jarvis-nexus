@@ -1,7 +1,15 @@
 {
-  "functions": {
-    "api/*.js": { "maxDuration": 60 }
-  },
+  "version": 2,
+  "builds": [
+    { "src": "api/*.js", "use": "@vercel/node" },
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "css/**", "use": "@vercel/static" },
+    { "src": "js/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ],
   "crons": [
     { "path": "/api/rotina", "schedule": "0 11 * * 1-5" },
     { "path": "/api/rotina", "schedule": "0 19 * * 1-5" }
