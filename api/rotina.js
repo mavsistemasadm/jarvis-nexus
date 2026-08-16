@@ -95,7 +95,11 @@ module.exports = async (req, res) => {
     try {
       const wpp = require('./whatsapp');
       if (wpp.configurado()) {
-        await wpp.enviar(`*${assunto}*\n\n${resumo}`);
+        /* formato próprio do celular — o texto do e-mail vira parede lá */
+        const cabecalho = urgentes
+          ? `*NEXUS · ${urgentes} ${urgentes === 1 ? 'urgência' : 'urgências'}*`
+          : `*NEXUS · ${resultado.alertas.length} ${resultado.alertas.length === 1 ? 'ponto de atenção' : 'pontos de atenção'}*`;
+        await wpp.enviar(`${cabecalho}\n\n${vigia.resumirWhatsapp(resultado)}`);
         entrega.whatsapp = { enviado: true };
       } else {
         entrega.whatsapp = { pulado: 'WhatsApp não configurado' };
