@@ -1,4 +1,4 @@
-const db = require('./supabase');
+const db = require('../lib/supabase');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: { message: 'use POST' } });

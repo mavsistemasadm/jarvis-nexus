@@ -57,7 +57,7 @@ async function enviar(texto, destino) {
 async function historico(userName) {
   try {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) return [];
-    const db = require('./supabase');
+    const db = require('../lib/supabase');
     const user = await db.getOrCreateUser(userName);
     const sessao = await db.getOrCreateSession(user.id);
     const msgs = await db.getRecentMessages(sessao.id, 12);

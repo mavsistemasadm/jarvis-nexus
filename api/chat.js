@@ -7,7 +7,7 @@ const SOURCES = {
 };
 
 let db = null;
-try { db = require('./supabase'); } catch(e) { console.warn('[nexus] supabase não disponível:', e.message); }
+try { db = require('../lib/supabase'); } catch(e) { console.warn('[nexus] supabase não disponível:', e.message); }
 
 /* ---- helpers de rotinas (acesso direto ao Supabase de memória) ---- */
 function sbHeaders() {
@@ -69,7 +69,7 @@ async function lancarMovimentacao(l) {
 
 /* ---- Consulta aos negócios (financeiro, opera, peritos) ---- */
 let negocios = null;
-try { negocios = require('./negocios'); } catch (e) { console.warn('[nexus] negocios não disponível:', e.message); }
+try { negocios = require('../lib/negocios'); } catch (e) { console.warn('[nexus] negocios não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -209,7 +209,7 @@ module.exports = async (req, res) => {
       let vigiaBlock = '';
       if (negocios && process.env.NEXUS_VIGIA_NA_ABERTURA !== '0') {
         try {
-          const vigia = require('./vigia');
+          const vigia = require('../lib/vigia');
           /* Na Vercel a função tem teto de tempo, e a saudação é o pior lugar
              para gastá-lo: sem esse limite, uma base lenta atrasa a abertura
              inteira e a resposta é cortada. Melhor abrir sem os alertas do que

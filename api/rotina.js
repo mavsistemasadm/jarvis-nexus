@@ -9,7 +9,7 @@
    mudou desde o anterior, o cron roda e fica calado.                        */
 
 const crypto = require('crypto');
-const vigia = require('./vigia');
+const vigia = require('../lib/vigia');
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_ANON_KEY;
