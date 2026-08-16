@@ -24,20 +24,36 @@ function sbHeaders() {
 
 /* Sem Supabase o dedupe não existe — avisamos e entregamos assim mesmo.
    Perder um aviso é pior do que repetir um. */
-async function jaAvisado(hash) {
-  if (!SB_URL || !SB_KEY) return false;
+/* `diag` existe porque a falha do dedupe era invisível: a tabela podia não
+   existir, ou o anon não ter permissão nela, e o único sintoma era o alerta
+   repetido — que se confunde com "o quadro mudou". Silêncio que esconde
+   defeito é o mesmo erro que o resto do sistema combate. */
+async function jaAvisado(hash, diag) {
+  if (!SB_URL || !SB_KEY) { diag.dedupe = 'sem SUPABASE_URL/ANON_KEY'; return false; }
   const desde = new Date(Date.now() - JANELA_SILENCIO_H * 3600000).toISOString();
   const r = await fetch(`${SB_URL}/rest/v1/alertas?hash=eq.${hash}&entregue_em=gte.${desde}&select=id&limit=1`, { headers: sbHeaders() });
-  if (!r.ok) return false;
-  return (await r.json()).length > 0;
+  if (!r.ok) {
+    diag.dedupe = `leitura falhou: HTTP ${r.status} ${(await r.text()).slice(0, 160)}`;
+    return false;
+  }
+  const achou = (await r.json()).length > 0;
+  diag.dedupe = achou ? 'ja avisado nesta janela' : 'nada igual na janela';
+  return achou;
 }
 
-async function registrar(hash, resumo, qtd) {
+async function registrar(hash, resumo, qtd, diag) {
   if (!SB_URL || !SB_KEY) return;
-  await fetch(`${SB_URL}/rest/v1/alertas`, {
-    method: 'POST', headers: sbHeaders(),
-    body: JSON.stringify({ hash, resumo, quantidade: qtd, entregue_em: new Date().toISOString() })
-  }).catch(e => console.warn('[nexus] alerta não registrado:', e.message));
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/alertas`, {
+      method: 'POST', headers: sbHeaders(),
+      body: JSON.stringify({ hash, resumo, quantidade: qtd, entregue_em: new Date().toISOString() })
+    });
+    diag.registro = r.ok ? 'gravado' : `HTTP ${r.status} ${(await r.text()).slice(0, 160)}`;
+    if (!r.ok) console.warn('[nexus] alerta não registrado:', diag.registro);
+  } catch (e) {
+    diag.registro = 'erro: ' + e.message;
+    console.warn('[nexus] alerta não registrado:', e.message);
+  }
 }
 
 async function enviarEmail(assunto, corpo) {
@@ -80,9 +96,10 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ok: true, alertas: 0, acao: 'nada a avisar', falhas: resultado.falhas });
     }
 
+    const diag = {};
     const hash = crypto.createHash('sha1').update(resumo).digest('hex').slice(0, 40);
-    if (await jaAvisado(hash)) {
-      return res.status(200).json({ ok: true, alertas: resultado.alertas.length, acao: 'silenciado (nada mudou desde o último aviso)' });
+    if (await jaAvisado(hash, diag)) {
+      return res.status(200).json({ ok: true, alertas: resultado.alertas.length, acao: 'silenciado (nada mudou desde o último aviso)', diag });
     }
 
     const assunto = urgentes
@@ -112,7 +129,7 @@ module.exports = async (req, res) => {
     /* só marca como avisado se ALGUM canal entregou — senão o silêncio da
        próxima rodada esconderia um alerta que ninguém recebeu */
     const chegou = (entrega.whatsapp && entrega.whatsapp.enviado) || (entrega.email && entrega.email.enviado);
-    if (chegou) await registrar(hash, resumo, resultado.alertas.length);
+    if (chegou) await registrar(hash, resumo, resultado.alertas.length, diag);
 
     res.status(200).json({
       ok: true,
@@ -120,6 +137,7 @@ module.exports = async (req, res) => {
       urgentes,
       entrega,
       falhas: resultado.falhas,
+      diag,
       resumo
     });
   } catch (e) {
