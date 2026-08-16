@@ -210,7 +210,14 @@ module.exports = async (req, res) => {
       if (negocios && process.env.NEXUS_VIGIA_NA_ABERTURA !== '0') {
         try {
           const vigia = require('./vigia');
-          const r = await vigia.avaliar();
+          /* Na Vercel a função tem teto de tempo, e a saudação é o pior lugar
+             para gastá-lo: sem esse limite, uma base lenta atrasa a abertura
+             inteira e a resposta é cortada. Melhor abrir sem os alertas do que
+             não abrir. */
+          const r = await Promise.race([
+            vigia.avaliar(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('vigia demorou demais')), Number(process.env.NEXUS_VIGIA_TIMEOUT_MS || 4000)))
+          ]);
           if (r.alertas.length) {
             const urgentes = r.alertas.filter(a => a.severidade === 'urgente');
             vigiaBlock = `\n\nO que está pedindo atenção neste momento (você levantou isso sozinho, não foi pedido):\n${vigia.resumir(r)}\n`
