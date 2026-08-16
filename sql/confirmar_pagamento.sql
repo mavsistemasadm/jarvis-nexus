@@ -1,8 +1,9 @@
 -- ══════════════════════════════════════════════════════════════════
 -- confirmar_pagamento — baixa de uma conta por voz, via NEXUS.
 --
--- Rode este arquivo no SQL Editor do Supabase do grupo-mh-financeiro
--- (projeto SEU-PROJETO). Sem ele, a tag <pagamento_confirmar>
+-- RODE NO SQL EDITOR DO SUPABASE DO **grupo-mh-financeiro** — o projeto
+-- que contem a tabela `movimentacoes`. Rodar no projeto errado devolve
+-- 'relation "movimentacoes" does not exist'. Sem ele, a tag <pagamento_confirmar>
 -- responde "função não encontrada" e nada é gravado.
 --
 -- POR QUE UM RPC E NÃO UM PATCH DIRETO NA TABELA.
@@ -34,7 +35,13 @@ as $$
 declare
   v_user  uuid;
   v_n     int;
-  v_row   movimentacoes%rowtype;
+  /* Campos soltos em vez de movimentacoes%rowtype: o %rowtype amarra a
+     função à tabela já na compilação, e o erro que isso produz
+     ("relation does not exist") aponta para a linha da declaração, não
+     para a causa — que é estar no banco errado. */
+  v_id    uuid;
+  v_desc  text;
+  v_valor numeric;
   v_data  date := coalesce(p_data_pagamento, current_date);
 begin
   select id into v_user from usuarios where email = p_email;
@@ -62,7 +69,7 @@ begin
       '" — informe o valor exato ou uma descrição mais específica');
   end if;
 
-  select * into v_row
+  select m.id, m.descricao, m.valor into v_id, v_desc, v_valor
     from movimentacoes m
    where m.usuario_id = v_user
      and coalesce(m.ativo, true)
@@ -79,13 +86,13 @@ begin
          forma_pagamento = coalesce(p_forma, forma_pagamento),
          status          = 'Pago',
          dias_atraso     = 0
-   where id = v_row.id;
+   where id = v_id;
 
   return jsonb_build_object(
     'ok', true,
-    'id', v_row.id,
-    'descricao', v_row.descricao,
-    'valor', v_row.valor,
+    'id', v_id,
+    'descricao', v_desc,
+    'valor', v_valor,
     'data_pagamento', v_data
   );
 end;
