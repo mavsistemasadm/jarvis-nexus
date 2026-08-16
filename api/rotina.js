@@ -97,7 +97,7 @@ module.exports = async (req, res) => {
     }
 
     const diag = {};
-    const hash = crypto.createHash('sha1').update(resumo).digest('hex').slice(0, 40);
+    const hash = crypto.createHash('sha1').update(vigia.assinatura(resultado)).digest('hex').slice(0, 40);
     if (await jaAvisado(hash, diag)) {
       return res.status(200).json({ ok: true, alertas: resultado.alertas.length, acao: 'silenciado (nada mudou desde o último aviso)', diag });
     }
