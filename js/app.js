@@ -814,6 +814,10 @@ let voices=[];
 const VOZES_MASCULINAS=['Ricardo','Eddy','Reed','Rocko','Felipe','Daniel','Google português do Brasil','Grandpa'];
 const FEMININAS=/luciana|sandy|shelley|flo|grandma|joana|catarina|fernanda|helena/i;
 function vozMasculina(){
+  /* O Safari nem sempre dispara onvoiceschanged, e getVoices() pode vir vazio
+     na carga. Se a lista estiver vazia na hora de falar, relê — sem isto o
+     Safari cai no padrão do sistema (Luciana) mesmo com a escolha certa. */
+  if(!voices.length)voices=speechSynthesis.getVoices()||[];
   const pt=voices.filter(v=>v.lang&&v.lang.toLowerCase().startsWith('pt'));
   for(const nome of VOZES_MASCULINAS){
     const v=pt.find(v=>v.name.toLowerCase().includes(nome.toLowerCase()));
