@@ -136,7 +136,7 @@ module.exports = async (req, res) => {
         json(o) { resolve(o); },
         end() { resolve({}); }
       };
-      chat({ method: 'POST', body: { system: SYSTEM_WPP, messages, userName: 'Marlos', webSearch: true } }, fake)
+      chat({ method: 'POST', body: { system: SYSTEM_WPP, messages, userName: 'Marlos', webSearch: true, origem: 'whatsapp' } }, fake)
         .catch(e => resolve({ error: { message: String(e.message || e) } }));
     });
 

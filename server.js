@@ -31,6 +31,7 @@ const apiRotina = require('./api/rotina');
 const apiWhatsapp = require('./api/whatsapp');
 const apiNexusSso = require('./api/nexus-sso');
 const apiSessao = require('./api/sessao');
+const apiMemorias = require('./api/memorias');
 
 function parseBody(req) {
   return new Promise((resolve) => {
@@ -94,6 +95,7 @@ http.createServer(async (req, res) => {
   if (req.url.startsWith('/api/whatsapp')) return wrapHandler(apiWhatsapp)(req, res);
   if (req.url.startsWith('/api/nexus-sso')) return wrapHandler(apiNexusSso)(req, res);
   if (req.url.startsWith('/api/sessao')) return wrapHandler(apiSessao)(req, res);
+  if (req.url.startsWith('/api/memorias')) return wrapHandler(apiMemorias)(req, res);
   if (req.url === '/favicon.ico') { res.writeHead(204); return res.end(); }
   serveStatic(req, res);
 }).on('error', e => {

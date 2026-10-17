@@ -70,6 +70,8 @@ async function lancarMovimentacao(l) {
 /* ---- Consulta aos negócios (financeiro, opera, peritos) ---- */
 let negocios = null;
 try { negocios = require('../lib/negocios'); } catch (e) { console.warn('[nexus] negocios não disponível:', e.message); }
+let acoes = null, financeiroApp = null;
+try { acoes = require('../lib/acoes'); financeiroApp = require('../lib/financeiro-app'); } catch (e) { console.warn('[nexus] ações/financeiro-app não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -141,6 +143,9 @@ async function buildBriefing() {
 
 async function atender(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: { message: 'use POST' } });
+  /* O instante em que esta requisição começou: lib/acoes.js recusa confirmar
+     uma ação criada depois dele, ou seja, proposta nesta mesma resposta. */
+  const inicioRequisicao = Date.now();
 
   const { system, messages, sources = [], webSearch = false, userName = 'Marlos' } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -237,8 +242,21 @@ Se ele responder com um artista ou música, use a tag do Spotify normalmente.
 Só depois disso responda o que ele perguntou. Tudo junto, natural, sem soar protocolar nem virar lista — é uma pessoa falando.`;
     }
 
+    let pendentesBlock = '';
+    if (acoes && acoes.disponivel()) {
+      try {
+        const pend = await acoes.pendentesRecentes();
+        if (pend.length) {
+          pendentesBlock = '\n\n== AÇÕES ESPERANDO A CONFIRMAÇÃO DO MARLOS ==\n'
+            + pend.map(p => `- acao_id ${p.id}: ${p.resumo}`).join('\n')
+            + '\nSe a fala dele agora confirma uma delas, chame confirmar_acao com o acao_id. Se ele recusou ou mudou de ideia, cancelar_acao.';
+        }
+      } catch (e) { console.warn('[nexus] pendentes indisponíveis:', e.message); }
+    }
+
     const enrichedSystem = system
       + makeHooksBlock()
+      + pendentesBlock
       + memoryBlock
       + routineBlock
       + briefingBlock
@@ -318,7 +336,20 @@ Marlos é o gestor do grupo — quando ele perguntar sobre números, prazos, cli
 Regras que não se quebram:
 - Nunca invente ou estime um número de negócio. Se a ferramenta devolver um campo "erro", diga que a fonte falhou e o que você não conseguiu ler — não preencha a lacuna.
 - Se a ferramenta trouxer um campo "aviso" ou "nota", respeite-o: ele existe porque aquele dado engana.
-- Você está respondendo por voz. Traga os números que decidem, não a tabela inteira: dois ou três itens e o total, não a lista completa. Valores em reais falados por extenso e arredondados quando não mudar a decisão.`;
+- Você está respondendo por voz. Traga os números que decidem, não a tabela inteira: dois ou três itens e o total, não a lista completa. Valores em reais falados por extenso e arredondados quando não mudar a decisão.
+
+== AÇÕES COM CONFIRMAÇÃO ==
+As ferramentas cuja descrição começa com "PROPÕE" NÃO gravam nada: devolvem um resumo e um acao_id. Leia o resumo e pergunte "Confirma?".
+Só na fala SEGUINTE, se ele disser que sim, chame confirmar_acao. O servidor recusa confirmação na mesma resposta da proposta e recusa se a fala dele não for um sim.
+Nunca diga que gravou antes de confirmar_acao devolver estado "executada". Se devolver "falhou", diga o erro.
+
+== CONFERÊNCIA DO FINANCEIRO ==
+Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o Marlos dizer empresa, centro de custo, categoria e produto.
+- "O que tem para conferir?": consulte financeiro_conferencia, diga quantos são, e vá UM de cada vez: favorecido, valor e data. Se houver sugestão, ofereça ("da última vez foi Pró-Labore, Gastos Pessoais, Farmácia. Pode ser?").
+- Quando ele responder, use financeiro_classificar. Pode juntar vários num pedido só se ele classificar em sequência. Por padrão a regra do favorecido é aprendida; "só desta vez" é lembrar=false.
+- "Sempre que vier X, é Y": financeiro_ensinar_regra.
+- Se o nome não existir, a ferramenta devolve as opções. Pergunte qual delas, ou ofereça criar com financeiro_criar_cadastro.
+- Use o que você sabe dele (memórias) para sugerir, mas quem decide é ele.`;
 
     const mcp_servers = [];
     for (const key of sources) {
@@ -332,7 +363,27 @@ Regras que não se quebram:
     /* ferramentas de negócio: só entram as fontes que estão realmente
        configuradas (ver api/negocios.js) */
     const toolDefs = negocios ? negocios.ferramentasDisponiveis() : [];
-    const tools = [...toolDefs];
+    /* Escrita com confirmação no servidor (lib/acoes.js) e a conferência do
+       Financeiro pela porta dele (lib/financeiro-app.js). */
+    const extras = [];
+    if (acoes && acoes.disponivel()) {
+      extras.push(...acoes.FERRAMENTAS);
+      if (financeiroApp && financeiroApp.configurado()) extras.push(...financeiroApp.FERRAMENTAS);
+    }
+    const tools = [...toolDefs, ...extras.map(f => f.def)];
+    const ultimaMsg = messages[messages.length - 1] || {};
+    const ctxAcao = {
+      inicio: inicioRequisicao,
+      ultimaFala: typeof ultimaMsg.content === 'string' ? ultimaMsg.content
+        : Array.isArray(ultimaMsg.content) ? ultimaMsg.content.filter(b => b.type === 'text').map(b => b.text).join(' ') : '',
+      origem: (req.body && req.body.origem) || 'tela',
+    };
+    const executarFerramenta = async (nome, input) => {
+      const extra = extras.find(f => f.def.name === nome);
+      if (!extra) return negocios.executar(nome, input);
+      try { return await extra.run(input || {}, ctxAcao); }
+      catch (e) { console.error(`[nexus] ferramenta ${nome} falhou:`, e.message); return { erro: String(e.message || e) }; }
+    };
     if (webSearch) tools.push({ type: 'web_search_20250305', name: 'web_search' });
 
     const headers = { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01' };
@@ -373,7 +424,7 @@ Regras que não se quebram:
          mensagem de usuário — dividir em várias ensina o modelo a parar
          de pedir ferramentas em paralelo */
       const resultados = await Promise.all(pedidos.map(async (p) => {
-        const saida = await negocios.executar(p.name, p.input);
+        const saida = await executarFerramenta(p.name, p.input);
         console.log('[nexus] consulta:', p.name, JSON.stringify(p.input || {}));
         return {
           type: 'tool_result',

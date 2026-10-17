@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O que o Jarvis sabe</title>
+<style>
+  :root{--fundo:#030711;--texto:#dfe8ff;--suave:#9fb3d9;--linha:rgba(159,179,217,.18);--card:#0b1426}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(circle at 50% 0%,#0b1a33 0%,var(--fundo) 60%);color:var(--texto);font-family:system-ui,-apple-system,sans-serif;min-height:100vh}
+  main{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+  a{color:var(--texto)}
+  h1{font-size:22px;letter-spacing:.02em;margin:8px 0 4px}
+  h2{font-size:15px;color:var(--suave);font-weight:600;margin:28px 0 10px;text-transform:uppercase;letter-spacing:.08em}
+  p.sub{color:var(--suave);margin:0 0 8px;font-size:14px}
+  .item{background:var(--card);border:1px solid var(--linha);border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start}
+  .item .txt{flex:1;font-size:14.5px;line-height:1.5}
+  .tag{display:inline-block;font-size:11px;color:var(--suave);border:1px solid var(--linha);border-radius:999px;padding:1px 8px;margin-right:6px}
+  .quando{font-size:12px;color:var(--suave);margin-top:4px}
+  button{background:none;border:1px solid var(--linha);color:var(--suave);border-radius:10px;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px}
+  button:hover{color:var(--texto)}
+  .vazio{color:var(--suave);font-size:14px}
+  .topo{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <div class="topo"><a href="/">← Voltar ao Jarvis</a></div>
+  <h1>O que o Jarvis sabe</h1>
+  <p class="sub">Tudo o que ele guardou sobre você e tudo o que ele fez. Apague o que estiver errado.</p>
+
+  <h2>Memórias</h2>
+  <div id="memorias"><p class="vazio">Carregando...</p></div>
+
+  <h2>Regras do Financeiro</h2>
+  <div class="item"><div class="txt">As regras de classificação (favorecido → empresa, centro, categoria e produto) ficam no próprio Financeiro, junto com as que você cria pela tela de conferência.<div class="quando"><a id="linkRegras" href="#" target="_blank" rel="noopener">Abrir as regras no Financeiro</a></div></div></div>
+
+  <h2>O que ele fez nos últimos 14 dias</h2>
+  <div id="acoes"><p class="vazio">Carregando...</p></div>
+</main>
+<script>
+var ESTADOS = { executada: 'feito', pendente: 'esperando confirmação', cancelada: 'cancelado', falhou: 'falhou', expirada: 'expirou' };
+function quando(d) { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+function carregar() {
+  fetch('/api/memorias', { credentials: 'same-origin' }).then(function (r) {
+    if (r.status === 401) { location.href = '/'; return null; }
+    return r.json();
+  }).then(function (d) {
+    if (!d) return;
+    document.getElementById('linkRegras').href = d.regras_financeiro || '#';
+    var m = document.getElementById('memorias'); m.innerHTML = '';
+    if (!d.memorias.length) m.appendChild(el('p', 'vazio', 'Nenhuma memória ainda.'));
+    d.memorias.forEach(function (x) {
+      var it = el('div', 'item'), t = el('div', 'txt');
+      t.appendChild(el('span', 'tag', x.category)); t.appendChild(document.createTextNode(x.content));
+      t.appendChild(el('div', 'quando', quando(x.updated_at)));
+      var b = el('button', null, 'Apagar');
+      b.onclick = function () {
+        if (!confirm('Apagar esta memória?')) return;
+        fetch('/api/memorias', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: x.id }) }).then(carregar);
+      };
+      it.appendChild(t); it.appendChild(b); m.appendChild(it);
+    });
+    var a = document.getElementById('acoes'); a.innerHTML = '';
+    if (!d.acoes.length) a.appendChild(el('p', 'vazio', 'Nada nos últimos 14 dias.'));
+    d.acoes.forEach(function (x) {
+      var it = el('div', 'item'), t = el('div', 'txt');
+      t.appendChild(el('span', 'tag', ESTADOS[x.estado] || x.estado)); t.appendChild(document.createTextNode(x.resumo));
+      t.appendChild(el('div', 'quando', quando(x.criada_em) + (x.origem ? ' · ' + x.origem : '')));
+      it.appendChild(t); a.appendChild(it);
+    });
+  });
+}
+carregar();
+</script>
+</body>
+</html>
