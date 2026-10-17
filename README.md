@@ -104,6 +104,27 @@ tabelas e nenhuma policy. Só a `SUPABASE_SERVICE_KEY` lê e escreve.
 credencial do GitHub. Ficam fora do índice: backup, histórico e
 `conversas-vendas-mh.md` (conversa real de cliente).
 
+## O que o Jarvis alcança (17/10/2026)
+
+| Ferramenta | De onde lê ou onde escreve |
+|---|---|
+| `nexus_panorama` | função `jarvis_nexus_panorama` no banco do Nexus |
+| `academy_panorama` | função `jarvis_academy_panorama` no banco da Academy |
+| `trafego_meta` | `/api/admin/ads/meta-desempenho` do Nexus (`x-jarvis-key`) |
+| `email_*` | compositor do Nexus `/api/admin/comunicacao/*`, como operador |
+| `academy_*` | `/api/integracoes/jarvis` da Academy (`JARVIS_ACADEMY_KEY`) |
+| `financeiro_*` (conferência) | `/api/jarvis` do Financeiro (`JARVIS_FINANCEIRO_KEY`) |
+| `cerebro_*` | índice `cerebro_secoes` dos documentos de todos os repositórios |
+| `abrir_tarefa_codigo` | issues no GitHub, só com `GITHUB_TOKEN_TAREFAS` |
+
+⚠️ **Regra de todas:** o Jarvis lê e escreve pela porta de cada produto, nunca
+direto no banco dos outros, e toda escrita propõe e espera o sim
+(`lib/acoes.js`). As definições (o que é venda, o que é aluno ativo) moram no
+produto, não aqui.
+
+O vigia (`api/rotina.js`) avisa por três canais: celular (🟡 Jarvis, pela
+central de notificações do Nexus), WhatsApp e email.
+
 ## Escrita por voz
 
 Escrita **não** é tool use — passa pelas tags, sempre em duas etapas: o NEXUS

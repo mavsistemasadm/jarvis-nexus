@@ -51,8 +51,9 @@ try { panoramas = require('../lib/panoramas'); } catch (e) { console.warn('[nexu
 let trafego = null, emails = null;
 try { trafego = require('../lib/trafego'); } catch (e) { console.warn('[nexus] tráfego não disponível:', e.message); }
 try { emails = require('../lib/emails'); } catch (e) { console.warn('[nexus] emails não disponível:', e.message); }
-let academyApp = null;
+let academyApp = null, tarefas = null;
 try { academyApp = require('../lib/academy-app'); } catch (e) { console.warn('[nexus] academy-app não disponível:', e.message); }
+try { tarefas = require('../lib/tarefas'); } catch (e) { console.warn('[nexus] tarefas não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -259,7 +260,12 @@ Para pausar: <spotify_ctrl>pause</spotify_ctrl> | continuar: <spotify_ctrl>play<
 Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado), o servidor avisa o usuário — você não precisa tratar.
 
 == DADOS DO NEGÓCIO ==
-Você tem ferramentas que leem os sistemas reais do Grupo MH: financeiro (grupo-mh-financeiro), Opera/mh-gestao (processos, agenda, WhatsApp, comercial) e a plataforma Nexus/Peritos Academy (assinaturas).
+Você tem ferramentas que leem os sistemas reais do Grupo MH:
+- Nexus, o negócio: nexus_panorama (vendas, cancelamentos, inadimplência, checkout abandonado, esteiras, email, contatos, indicações; o MRR certo é o do Asaas, não daqui).
+- Peritos Academy: academy_panorama (alunos ativos e parados, aprendizado, dúvidas e desafios esperando o Marlos, próximas lives), academy_cursos, academy_eventos.
+- Tráfego pago: trafego_meta (campanhas do Meta pelo pixel). O pixel subconta venda: compare com nexus_panorama antes de dizer que um anúncio não vende.
+- Financeiro (grupo-mh-financeiro) e Opera/mh-gestao (processos, agenda, WhatsApp, comercial), como antes.
+O que ele pode mandar fazer, sempre com confirmação: lançamentos e conferência no Financeiro, agenda e processo no Opera, email pelo compositor do Nexus (escrever rascunho e mandar teste não precisam de confirmação; disparar precisa, e o resumo mostra quantas pessoas recebem), matrícula e anúncio de live na Academy, e tarefa de código para o Claude Code quando existir a ferramenta.
 Marlos é o gestor do grupo — quando ele perguntar sobre números, prazos, clientes ou contas, CONSULTE a ferramenta em vez de responder de memória. Prefira uma consulta a mais do que um palpite.
 Regras que não se quebram:
 - Nunca invente ou estime um número de negócio. Se a ferramenta devolver um campo "erro", diga que a fonte falhou e o que você não conseguiu ler — não preencha a lacuna.
@@ -308,6 +314,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       if (escritas) extras.push(...escritas.FERRAMENTAS);
       if (emails && emails.disponivel()) extras.push(...emails.FERRAMENTAS);
       if (academyApp && academyApp.disponivel()) extras.push(...academyApp.FERRAMENTAS);
+      if (tarefas && tarefas.disponivel()) extras.push(...tarefas.FERRAMENTAS);
       if (financeiroApp && financeiroApp.configurado()) extras.push(...financeiroApp.FERRAMENTAS);
     }
     const tools = [...toolDefs, ...extras.map(f => f.def)];
