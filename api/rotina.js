@@ -106,9 +106,21 @@ module.exports = async (req, res) => {
       ? `NEXUS: ${urgentes} ponto(s) urgente(s)`
       : `NEXUS: ${resultado.alertas.length} ponto(s) de atenção`;
 
-    /* Dois canais independentes. O WhatsApp chega no bolso; o e-mail é o
-       registro. Um falhar não pode calar o outro. */
+    /* Três canais independentes. O celular (pela central do Nexus) e o
+       WhatsApp chegam no bolso; o e-mail é o registro. Um falhar não pode
+       calar os outros. */
     const entrega = {};
+    try {
+      const { avisarNoCelular } = require('../lib/push');
+      // As duas primeiras pendências, sem travessão (texto que o dono lê na tela).
+      const primeiro = resultado.alertas.slice(0, 2).map(a => String(a.titulo || a.texto || '').replace(/\s+—\s+/g, ', ')).filter(Boolean).join('; ');
+      entrega.celular = await avisarNoCelular({
+        ref: `vigia:${hash}`,
+        titulo: urgentes ? `${urgentes} ${urgentes === 1 ? 'urgência' : 'urgências'}` : `${resultado.alertas.length} ${resultado.alertas.length === 1 ? 'ponto de atenção' : 'pontos de atenção'}`,
+        corpo: String(primeiro).slice(0, 200) || 'Toque para perguntar ao Jarvis.',
+        para: '/',
+      });
+    } catch (e) { entrega.celular = { erro: e.message }; }
     try {
       const wpp = require('./whatsapp');
       if (wpp.configurado()) {
@@ -128,7 +140,7 @@ module.exports = async (req, res) => {
 
     /* só marca como avisado se ALGUM canal entregou — senão o silêncio da
        próxima rodada esconderia um alerta que ninguém recebeu */
-    const chegou = (entrega.whatsapp && entrega.whatsapp.enviado) || (entrega.email && entrega.email.enviado);
+    const chegou = (entrega.celular && entrega.celular.enviado) || (entrega.whatsapp && entrega.whatsapp.enviado) || (entrega.email && entrega.email.enviado);
     if (chegou) await registrar(hash, resumo, resultado.alertas.length, diag);
 
     res.status(200).json({
