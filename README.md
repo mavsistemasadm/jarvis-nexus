@@ -88,9 +88,17 @@ Quem enche o índice é `scripts/sincronizar-cerebros.mjs`, lendo a branch
 `main` no GitHub:
 
 ```bash
-GITHUB_TOKEN=$(gh auth token) SUPABASE_URL=... SUPABASE_ANON_KEY=... \
+GITHUB_TOKEN=$(gh auth token) SUPABASE_URL=... SUPABASE_SERVICE_KEY=... \
   node scripts/sincronizar-cerebros.mjs
 ```
+
+O cron `/api/cerebro-sync` (6h de Brasília) faz o mesmo todo dia, de forma
+incremental (só baixa o documento cujo sha mudou), quando existir
+`GITHUB_TOKEN_LEITURA`: token fine-grained com "Contents: Read-only" nos
+repositórios e nada mais. Sem ele o cron responde 503 e não faz nada.
+
+⚠️ **O banco do Jarvis é fechado** (`sql/seguranca.sql`): RLS em todas as
+tabelas e nenhuma policy. Só a `SUPABASE_SERVICE_KEY` lê e escreve.
 
 ⚠️ O token do GitHub fica na máquina de quem roda. O Jarvis não recebe
 credencial do GitHub. Ficam fora do índice: backup, histórico e

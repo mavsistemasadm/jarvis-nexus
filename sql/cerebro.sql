@@ -68,3 +68,8 @@ as $$
   order by relevancia desc
   limit least(greatest(p_limite, 1), 12)
 $$;
+
+-- A versão de cada documento no GitHub (sha do blob): a sincronização diária
+-- só baixa de novo o que mudou. Sem isso, 93 documentos por dia estouram o
+-- tempo da função na Vercel.
+alter table public.cerebro_secoes add column if not exists sha text;
