@@ -51,6 +51,30 @@
   <div class="hint">Menos fontes ativas = respostas mais rápidas.</div>
 </div>
 
+<!-- A porta do Nexus (lib/sessao.js): sem sessão do dono, nada aqui responde,
+     e esta camada leva ao login do Nexus. -->
+<div id="portao" hidden>
+  <div class="t">N E X U S</div>
+  <p id="portaoMsg">Entre com a sua conta do Nexxus para usar o Jarvis.</p>
+  <a id="portaoBtn" href="https://www.nexuspericial.com.br/abrir/jarvis">Entrar com o Nexxus</a>
+</div>
+<script>
+(function () {
+  var erros = {
+    nao_autorizado: 'Esta conta do Nexxus não tem acesso ao Jarvis.',
+    token_invalido: 'O login do Nexxus expirou. Entre de novo.',
+    token_ausente: 'O login do Nexxus não chegou. Entre de novo.',
+    configuracao: 'O Jarvis está sem a configuração de acesso. Fale com o suporte.'
+  };
+  var erro = new URLSearchParams(location.search).get('erro');
+  fetch('/api/sessao', { credentials: 'same-origin' }).then(function (r) {
+    if (r.ok) { if (erro) history.replaceState(null, '', '/'); return; }
+    if (erro && erros[erro]) document.getElementById('portaoMsg').textContent = erros[erro];
+    document.getElementById('portao').hidden = false;
+  }).catch(function () { document.getElementById('portao').hidden = false; });
+})();
+</script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="js/app.js"></script>
 </body>

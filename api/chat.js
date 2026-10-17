@@ -139,7 +139,7 @@ async function buildBriefing() {
   return out;
 }
 
-module.exports = async (req, res) => {
+async function atender(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: { message: 'use POST' } });
 
   const { system, messages, sources = [], webSearch = false, userName = 'Marlos' } = req.body || {};
@@ -503,3 +503,9 @@ Regras que não se quebram:
     res.status(500).json({ error: { message: String(e) } });
   }
 };
+
+/* Só o dono, pela sessão do Nexus (lib/sessao.js). `interno` é o handler cru,
+   para quem chama por dentro já autenticado por outro caminho (o WhatsApp). */
+const { comSessao } = require('../lib/sessao');
+module.exports = comSessao(atender);
+module.exports.interno = atender;

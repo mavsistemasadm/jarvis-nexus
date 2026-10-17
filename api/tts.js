@@ -13,7 +13,7 @@ async function listarVozes(apiKey) {
   } catch (e) { return 'não consegui listar as vozes: ' + e.message; }
 }
 
-module.exports = async (req, res) => {
+async function atender(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const { text } = req.body || {};
@@ -65,3 +65,9 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: String(e) });
   }
 };
+
+/* Só o dono, pela sessão do Nexus (lib/sessao.js). `interno` é o handler cru,
+   para quem chama por dentro já autenticado por outro caminho (o WhatsApp). */
+const { comSessao } = require('../lib/sessao');
+module.exports = comSessao(atender);
+module.exports.interno = atender;

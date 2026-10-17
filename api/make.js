@@ -32,7 +32,7 @@ async function disparar(nome, dados = {}) {
   }
 }
 
-module.exports = async (req, res) => {
+async function atender(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'use POST' });
   const { acao, nome, dados } = req.body || {};
   if (acao === 'listar') return res.status(200).json({ hooks: hooks().map(h => ({ nome: h.nome, descricao: h.descricao })) });
@@ -41,3 +41,9 @@ module.exports = async (req, res) => {
 };
 module.exports.hooks = hooks;
 module.exports.disparar = disparar;
+
+/* Só o dono, pela sessão do Nexus (lib/sessao.js). `interno` é o handler cru,
+   para quem chama por dentro já autenticado por outro caminho (o WhatsApp). */
+const { comSessao } = require('../lib/sessao');
+module.exports = comSessao(atender);
+module.exports.interno = atender;

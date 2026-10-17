@@ -122,7 +122,9 @@ module.exports = async (req, res) => {
   console.log('[nexus] whatsapp recebido:', texto.slice(0, 80));
 
   try {
-    const chat = require('./chat');
+    // O handler cru: o WhatsApp já conferiu o segredo do webhook e o número do
+    // dono, e não tem cookie de sessão. Ver lib/sessao.js.
+    const chat = require('./chat').interno;
     const anteriores = await historico('Marlos');
     const messages = [...anteriores, { role: 'user', content: texto }];
 

@@ -82,7 +82,7 @@ async function controle(acao) {
   return { ok: true };
 }
 
-module.exports = async (req, res) => {
+async function atender(req, res) {
   const url = req.url || '';
   const c = creds();
 
@@ -130,3 +130,9 @@ module.exports = async (req, res) => {
 
   res.status(405).json({ error: 'método não suportado' });
 };
+
+/* Só o dono, pela sessão do Nexus (lib/sessao.js). `interno` é o handler cru,
+   para quem chama por dentro já autenticado por outro caminho (o WhatsApp). */
+const { comSessao } = require('../lib/sessao');
+module.exports = comSessao(atender);
+module.exports.interno = atender;

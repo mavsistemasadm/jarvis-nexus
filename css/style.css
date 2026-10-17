@@ -83,3 +83,10 @@
   #kbd{position:fixed;right:70px;bottom:36px;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--text-dim);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
   ::-webkit-scrollbar{width:6px}
   ::-webkit-scrollbar-thumb{background:var(--blue-dim);border-radius:3px}
+
+/* A porta do Nexus: cobre tudo enquanto não há sessão do dono (lib/sessao.js). */
+#portao{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;background:radial-gradient(circle at 50% 40%,#0b1a33 0%,#030711 70%);color:#dfe8ff;font-family:system-ui,-apple-system,sans-serif}
+#portao[hidden]{display:none}
+#portao .t{letter-spacing:.5em;font-size:20px;opacity:.85}
+#portao p{margin:0;max-width:320px;font-size:15px;line-height:1.5;color:#9fb3d9}
+#portao a{padding:12px 22px;border-radius:999px;background:#dfe8ff;color:#030711;font-weight:600;text-decoration:none;font-size:15px}

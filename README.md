@@ -212,6 +212,19 @@ ser a ponte mais versátil (agenda, financeiro, CRM etc. via cenários).
 
 ## Segurança
 
+**Desde 17/10/2026 o Jarvis exige login pelo Nexus** (`lib/sessao.js`). Antes
+disso a página e a API estavam abertas: quem achasse o endereço lia o
+financeiro e podia confirmar lançamento. A entrada é
+`nexuspericial.com.br/abrir/jarvis`, que manda o token do Nexus para
+`/api/nexus-sso`; só passa quem está em `JARVIS_DONOS` (ids de usuário do
+Nexus), e a sessão é um cookie assinado com `JARVIS_SESSAO_SEGREDO`. Sem as
+duas envs, ninguém entra. O WhatsApp e o cron seguem com segredo próprio.
+
+⚠️ Abrir para alunos NÃO é só pôr ids em `JARVIS_DONOS`: o Financeiro e o
+Opera são lidos por um dono fixo no ambiente (`FINANCEIRO_USER_EMAIL`,
+`OPERA_USER_ID`). Cada aluno veria os dados do dono.
+
+
 - A chave da API vive **apenas** no `.env` (que está no `.gitignore`) e nunca
   chega ao navegador.
 - O front-end só conversa com `/api/chat` do seu próprio servidor.
