@@ -1005,12 +1005,36 @@ async function ask(text){
   };
 
   try{
+    /* Modo progresso (17/10/2026): o servidor manda um evento a cada
+       ferramenta que consulta, e a resposta no evento `fim`. O status mostra
+       o passo enquanto espera, em vez de "processando" parado por dez
+       segundos. Resposta em JSON comum (servidor antigo) segue funcionando. */
     const res=await fetch("/api/chat",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(body)
+      body:JSON.stringify({...body,stream:true})
     });
-    const data=await res.json();
+    if(res.status===401){location.reload();return;}
+    let data=null;
+    if((res.headers.get('content-type')||'').includes('text/event-stream')&&res.body){
+      const leitor=res.body.getReader();const dec=new TextDecoder();let buf='';
+      while(true){
+        const {value,done}=await leitor.read();
+        if(done)break;
+        buf+=dec.decode(value,{stream:true});
+        let i;
+        while((i=buf.indexOf('\n\n'))>=0){
+          const bloco=buf.slice(0,i);buf=buf.slice(i+2);
+          if(!bloco.startsWith('data: '))continue;
+          let ev;try{ev=JSON.parse(bloco.slice(6));}catch(e){continue;}
+          if(ev.tipo==='ferramenta')statusText.textContent=rotuloFerramenta(ev.nome);
+          else if(ev.tipo==='fim')data=ev;
+        }
+      }
+      if(!data)throw new Error('a resposta foi cortada no meio');
+    }else{
+      data=await res.json();
+    }
     if(data.error)throw new Error(data.error.message||'erro na API');
     const answer=(data.content||[])
       .filter(b=>b.type==='text')
@@ -1037,6 +1061,18 @@ async function ask(text){
     history.pop();
     speak(msg,window.resumeWake);
   }
+}
+
+/* O que aparece no status enquanto o Jarvis consulta cada coisa. */
+function rotuloFerramenta(nome){
+  const r=[
+    [/^cerebro/,'lendo a documentação'],[/^financeiro_conferencia|^financeiro_opcoes/,'olhando a conferência'],
+    [/^financeiro/,'consultando o financeiro'],[/^nexus_panorama/,'olhando o Nexus'],[/^academy/,'olhando a Academy'],
+    [/^trafego/,'olhando os anúncios'],[/^email/,'no compositor de email'],[/^opera|^agenda|^processos|^pipeline|^whatsapp/,'consultando o Opera'],
+    [/^confirmar_acao/,'gravando'],[/^web_search/,'pesquisando na web'],[/^memoria/,'anotando'],[/^abrir_tarefa/,'abrindo a tarefa'],
+  ];
+  for(const [re,t] of r)if(re.test(nome))return t+'…';
+  return 'consultando…';
 }
 
 /* ============ UI ============ */

@@ -131,7 +131,22 @@ async function atender(req, res) {
      uma ação criada depois dele, ou seja, proposta nesta mesma resposta. */
   const inicioRequisicao = Date.now();
 
-  const { system, messages, sources = [], webSearch = false, userName = 'Marlos' } = req.body || {};
+  const { system, messages, sources = [], webSearch = false, userName = 'Marlos', stream = false } = req.body || {};
+  /* Modo progresso (17/10/2026): com `stream: true`, a resposta vira um fluxo
+     de eventos. A tela mostra o que o Jarvis está consultando enquanto espera
+     ("consultando o financeiro…") e recebe a resposta final no evento `fim`.
+     Quase todo o tempo é ferramenta, não texto: mostrar o passo é o que tira
+     a sensação de travado. Sem `stream`, tudo como antes (o WhatsApp usa assim). */
+  const emStream = !!stream && typeof res.write === 'function';
+  const emitir = (o) => { if (emStream) { try { res.write(`data: ${JSON.stringify(o)}\n\n`); } catch (_) {} } };
+  if (emStream) {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+    emitir({ tipo: 'inicio' });
+  }
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: { message: 'messages vazio' } });
   }
@@ -388,6 +403,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
          mensagem de usuário — dividir em várias ensina o modelo a parar
          de pedir ferramentas em paralelo */
       const resultados = await Promise.all(pedidos.map(async (p) => {
+        emitir({ tipo: 'ferramenta', nome: p.name });
         const saida = await executarFerramenta(p.name, p.input);
         console.log('[nexus] consulta:', p.name, JSON.stringify(p.input || {}));
         return {
@@ -476,9 +492,11 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       }
     }
 
+    if (emStream) { emitir({ tipo: 'fim', ...data }); return res.end(); }
     res.status(r.status).json(data);
   } catch (e) {
     console.error('[nexus] erro no /api/chat:', e);
+    if (emStream) { emitir({ tipo: 'fim', error: { message: String(e) } }); return res.end(); }
     res.status(500).json({ error: { message: String(e) } });
   }
 };
