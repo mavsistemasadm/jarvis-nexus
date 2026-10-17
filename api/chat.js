@@ -45,8 +45,9 @@ try { negocios = require('../lib/negocios'); } catch (e) { console.warn('[nexus]
 let acoes = null, financeiroApp = null, cerebro = null;
 try { acoes = require('../lib/acoes'); financeiroApp = require('../lib/financeiro-app'); } catch (e) { console.warn('[nexus] ações/financeiro-app não disponível:', e.message); }
 try { cerebro = require('../lib/cerebro'); } catch (e) { console.warn('[nexus] cérebro não disponível:', e.message); }
-let escritas = null;
+let escritas = null, panoramas = null;
 try { escritas = require('../lib/escritas'); } catch (e) { console.warn('[nexus] escritas não disponível:', e.message); }
+try { panoramas = require('../lib/panoramas'); } catch (e) { console.warn('[nexus] panoramas não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -295,6 +296,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
        Financeiro pela porta dele (lib/financeiro-app.js). */
     const extras = [];
     if (cerebro && cerebro.disponivel()) extras.push(...cerebro.FERRAMENTAS);
+    if (panoramas && panoramas.disponivel()) extras.push(...panoramas.FERRAMENTAS);
     if (acoes && acoes.disponivel()) {
       extras.push(...acoes.FERRAMENTAS);
       if (escritas) extras.push(...escritas.FERRAMENTAS);
