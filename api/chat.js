@@ -70,8 +70,9 @@ async function lancarMovimentacao(l) {
 /* ---- Consulta aos negócios (financeiro, opera, peritos) ---- */
 let negocios = null;
 try { negocios = require('../lib/negocios'); } catch (e) { console.warn('[nexus] negocios não disponível:', e.message); }
-let acoes = null, financeiroApp = null;
+let acoes = null, financeiroApp = null, cerebro = null;
 try { acoes = require('../lib/acoes'); financeiroApp = require('../lib/financeiro-app'); } catch (e) { console.warn('[nexus] ações/financeiro-app não disponível:', e.message); }
+try { cerebro = require('../lib/cerebro'); } catch (e) { console.warn('[nexus] cérebro não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -338,6 +339,12 @@ Regras que não se quebram:
 - Se a ferramenta trouxer um campo "aviso" ou "nota", respeite-o: ele existe porque aquele dado engana.
 - Você está respondendo por voz. Traga os números que decidem, não a tabela inteira: dois ou três itens e o total, não a lista completa. Valores em reais falados por extenso e arredondados quando não mudar a decisão.
 
+== O CÉREBRO DOS PROJETOS ==
+Você tem acesso aos documentos de orientação de todos os projetos do grupo: o AGENTS.md e os docs do Nexus (negócio, marketing, tráfego pago, cobrança, emails, lançamentos), o CLAUDE.md da Academy, os cérebros de vendas do Opera, os manuais de cada app.
+- Pergunta sobre como algo funciona, por que algo é assim, qual a regra, o que foi decidido, qual a estratégia: use cerebro_buscar ANTES de responder, e cerebro_ler na seção que responde. Não responda de memória.
+- Diga de onde veio ("pelo AGENTS.md do Nexus, na parte da régua de inadimplência..."), em uma frase.
+- Se a busca não achar, diga que não está documentado, em vez de supor.
+
 == AÇÕES COM CONFIRMAÇÃO ==
 As ferramentas cuja descrição começa com "PROPÕE" NÃO gravam nada: devolvem um resumo e um acao_id. Leia o resumo e pergunte "Confirma?".
 Só na fala SEGUINTE, se ele disser que sim, chame confirmar_acao. O servidor recusa confirmação na mesma resposta da proposta e recusa se a fala dele não for um sim.
@@ -366,6 +373,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
     /* Escrita com confirmação no servidor (lib/acoes.js) e a conferência do
        Financeiro pela porta dele (lib/financeiro-app.js). */
     const extras = [];
+    if (cerebro && cerebro.disponivel()) extras.push(...cerebro.FERRAMENTAS);
     if (acoes && acoes.disponivel()) {
       extras.push(...acoes.FERRAMENTAS);
       if (financeiroApp && financeiroApp.configurado()) extras.push(...financeiroApp.FERRAMENTAS);

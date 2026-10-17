@@ -77,6 +77,25 @@ Duas armadilhas já pagas, documentadas no código:
   **não** pode ser afirmado — dizer "zero usuários ativos" a partir de coluna
   vazia parece medição e é ausência de medição.
 
+## O cérebro dos projetos (17/10/2026)
+
+O Jarvis lê os documentos de orientação de todos os repositórios (CLAUDE.md,
+AGENTS.md, docs/*.md) por `cerebro_buscar`, `cerebro_ler` e `cerebro_indice`
+(`lib/cerebro.js`). Eles ficam indexados por título na tabela
+`cerebro_secoes` (`sql/cerebro.sql`), com busca em português sem acento.
+
+Quem enche o índice é `scripts/sincronizar-cerebros.mjs`, lendo a branch
+`main` no GitHub:
+
+```bash
+GITHUB_TOKEN=$(gh auth token) SUPABASE_URL=... SUPABASE_ANON_KEY=... \
+  node scripts/sincronizar-cerebros.mjs
+```
+
+⚠️ O token do GitHub fica na máquina de quem roda. O Jarvis não recebe
+credencial do GitHub. Ficam fora do índice: backup, histórico e
+`conversas-vendas-mh.md` (conversa real de cliente).
+
 ## Escrita por voz
 
 Escrita **não** é tool use — passa pelas tags, sempre em duas etapas: o NEXUS
