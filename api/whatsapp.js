@@ -56,7 +56,7 @@ async function enviar(texto, destino) {
    já grava — assim a conversa do WhatsApp e a da tela são a MESMA conversa. */
 async function historico(userName) {
   try {
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) return [];
+    if (!process.env.SUPABASE_URL || !(process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)) return [];
     const db = require('../lib/supabase');
     const user = await db.getOrCreateUser(userName);
     const sessao = await db.getOrCreateSession(user.id);

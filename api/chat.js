@@ -12,8 +12,8 @@ try { db = require('../lib/supabase'); } catch(e) { console.warn('[nexus] supaba
 /* ---- helpers de rotinas (acesso direto ao Supabase de memória) ---- */
 function sbHeaders() {
   return {
-    'apikey': process.env.SUPABASE_ANON_KEY,
-    'authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+    'apikey': (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY),
+    'authorization': `Bearer ${(process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)}`,
     'content-type': 'application/json',
     'prefer': 'return=representation'
   };
@@ -39,40 +39,14 @@ async function deactivateRoutine(userId, searchText) {
 }
 
 /* ---- lançamento de despesa/receita no Financeiro MH ---- */
-async function lancarMovimentacao(l) {
-  const FIN_URL = process.env.FIN_TEST_URL || process.env.FINANCEIRO_SUPABASE_URL;
-  const FIN_KEY = process.env.FINANCEIRO_SUPABASE_KEY;
-  const FIN_EMAIL = process.env.FINANCEIRO_USER_EMAIL;
-  if (!FIN_URL || !FIN_KEY || !FIN_EMAIL) return { erro: 'financeiro não configurado' };
-  const r = await fetch(`${FIN_URL}/rest/v1/rpc/lancar_movimentacao`, {
-    method: 'POST',
-    headers: { 'apikey': FIN_KEY, 'authorization': `Bearer ${FIN_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      p_email: FIN_EMAIL,
-      p_tipo: l.tipo || 'Despesa',
-      p_empresa: l.empresa,
-      p_descricao: l.descricao,
-      p_valor: l.valor,
-      p_data: l.data || null,
-      p_vencimento: l.vencimento || null,
-      p_categoria: l.categoria || null,
-      p_centro: l.centro || null,
-      p_produto: l.produto || null,
-      p_pago: !!l.pago,
-      p_data_pagamento: l.data_pagamento || null,
-      p_banco: l.banco || null,
-      p_forma: l.forma_pagamento || null
-    })
-  });
-  return r.json();
-}
-
 /* ---- Consulta aos negócios (financeiro, opera, peritos) ---- */
 let negocios = null;
 try { negocios = require('../lib/negocios'); } catch (e) { console.warn('[nexus] negocios não disponível:', e.message); }
 let acoes = null, financeiroApp = null, cerebro = null;
 try { acoes = require('../lib/acoes'); financeiroApp = require('../lib/financeiro-app'); } catch (e) { console.warn('[nexus] ações/financeiro-app não disponível:', e.message); }
 try { cerebro = require('../lib/cerebro'); } catch (e) { console.warn('[nexus] cérebro não disponível:', e.message); }
+let escritas = null;
+try { escritas = require('../lib/escritas'); } catch (e) { console.warn('[nexus] escritas não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -92,7 +66,9 @@ async function spotifyAcao(acao, busca) {
     return await new Promise((resolve) => {
       const req = { method: 'POST', url: '/api/spotify', body: { acao, busca } };
       const res = { statusCode: 200, status(c){this.statusCode=c;return this;}, setHeader(){}, json(o){resolve(o);}, end(){resolve({});} };
-      sp(req, res).catch(e => resolve({ erro: String(e.message || e) }));
+      // `interno`: o handler cru. A rota HTTP exige a sessão do dono, e esta
+      // chamada já acontece dentro de uma conversa autenticada.
+      sp.interno(req, res).catch(e => resolve({ erro: String(e.message || e) }));
     });
   } catch (e) { return { erro: String(e.message || e) }; }
 }
@@ -161,7 +137,7 @@ async function atender(req, res) {
     let session = null;
     let userId = null;
 
-    if (db && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+    if (db && process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)) {
       try {
         const user = await db.getOrCreateUser(userName);
         if (user && user.id) {
@@ -262,68 +238,13 @@ Só depois disso responda o que ele perguntou. Tudo junto, natural, sem soar pro
       + routineBlock
       + briefingBlock
       + saudacaoBlock
-      + `\n\n== INSTRUÇÕES DE MEMÓRIA ==
-Se o usuário compartilhar informações pessoais importantes (preferências, dados da empresa, metas, gostos, rotinas), responda normalmente E adicione ao final da sua resposta, invisível ao usuário, um bloco:
-<memory_extract>
-categoria: preferência|empresa|meta|gosto|rotina|pessoal
-conteúdo: frase curta descrevendo o fato
-</memory_extract>
-Pode adicionar múltiplos blocos. Só extraia fatos claros e relevantes, não extraia a cada mensagem.
+      + `\n\n== MEMÓRIA ==
+Quando ele contar algo duradouro (preferência, pessoa, empresa, um jeito de classificar ou de decidir), guarde com memoria_guardar, sem anunciar. Ele vê e apaga tudo na tela de memórias.
 
-== INSTRUÇÕES DE ROTINAS ==
-O usuário pode criar e remover rotinas por voz. Quando ele pedir para você fazer algo recorrente (ex.: "toda manhã me pergunte qual música quero ouvir", "sempre que eu falar contigo pela primeira vez no dia, me dê o resumo das contas"), confirme naturalmente na resposta E adicione ao final um bloco invisível:
-<routine_create>
-trigger: first_of_day
-ação: descrição curta do que fazer
-</routine_create>
-Por enquanto o único trigger suportado é first_of_day (primeira conversa do dia).
-Quando ele pedir para remover/cancelar uma rotina, confirme E adicione:
-<routine_delete>palavra-chave da rotina a remover</routine_delete>
-Se ele perguntar quais rotinas tem, responda com base na lista de ROTINAS ATIVAS acima.
-
-== INSTRUÇÕES DE LANÇAMENTO FINANCEIRO ==
-O usuário pode lançar despesas e receitas por voz (ex.: "lança 200 reais de almoço na MH Cálculos").
-Campos: tipo (Despesa/Receita), empresa (MH Cálculos, Peritos Academy ou AnyCalc), descricao, valor, categoria, data (padrão hoje), vencimento (padrão = data), centro de custo e produto (opcionais), pago (se já foi pago: data_pagamento, banco, forma_pagamento).
-Fluxo OBRIGATÓRIO em duas etapas:
-1) Quando ele ditar um lançamento, colete o que falta perguntando de forma natural (pergunte pelo menos categoria se não disse, e se já foi pago). Depois REPITA o resumo completo e pergunte "Confirma?". NUNCA emita a tag nesta etapa.
-2) SOMENTE quando ele confirmar explicitamente (sim/confirma/pode lançar), responda confirmando E adicione o bloco invisível:
-<lancamento_criar>
-{"tipo":"Despesa","empresa":"MH Cálculos","descricao":"Almoço","valor":200,"data":"2026-07-05","vencimento":"2026-07-05","categoria":"Alimentação","centro":"","produto":"","pago":true,"data_pagamento":"2026-07-05","banco":"Nubank","forma_pagamento":"Pix"}
-</lancamento_criar>
-Use a data de hoje quando ele disser "hoje". Valores sempre numéricos (200, não "duzentos").
-Se ele pedir lançamento RECORRENTE, avise que recorrentes chegam na próxima versão e ofereça lançar avulso.
-
-== INSTRUÇÕES DE CONFIRMAÇÃO DE PAGAMENTO ==
-O usuário pode dar baixa numa conta por voz ("paga o Supabase", "marca a Vercel como paga").
-Fluxo OBRIGATÓRIO em duas etapas, igual ao lançamento:
-1) Consulte financeiro_contas para achar a conta e CONFIRA em voz alta descrição, empresa, valor e vencimento. Pergunte "Confirma a baixa?". NUNCA emita a tag nesta etapa.
-2) Só depois do sim explícito, responda confirmando E adicione o bloco invisível:
-<pagamento_confirmar>
-{"descricao":"Supabase","valor":150.21,"data_pagamento":"2026-08-15","banco":"Nubank","forma_pagamento":"Pix"}
-</pagamento_confirmar>
-A "descricao" precisa bater com UMA única conta em aberto. Se o servidor responder que mais de uma bateu, peça o valor exato e tente de novo. Data de pagamento padrão é hoje.
-
-== INSTRUÇÕES DE AGENDA (OPERA) ==
-O usuário pode marcar compromissos por voz ("marca audiência dia 22 às 14h", "põe na agenda a entrega do laudo do Pedro dia 20").
-Campos: titulo e data (AAAA-MM-DD) são obrigatórios; hora (HH:MM, omita se for o dia todo), local, alerta_dias (avisar N dias antes) e tipo.
-Tipos válidos: entrega_laudo, entrega_quesitos, prazo_fatal, audiencia, reuniao, diligencia, prazo_processo, followup, outro.
-Colete o que faltar, repita o resumo, pergunte "Confirma?" e SÓ depois do sim adicione:
-<agenda_criar>
-{"tipo":"audiencia","titulo":"Audiência processo Pedro Bernardo","data":"2026-08-22","hora":"14:00","local":"Fórum de Joinville","alerta_dias":2}
-</agenda_criar>
-
-== INSTRUÇÕES DE CÁLCULO JUDICIAL (OPERA) ==
-O usuário pode abrir um processo/cálculo por voz. Siga a MESMA ordem das três etapas da tela, uma pergunta de cada vez:
-1) Atuação: ele é perito do juízo ou perito contratado? (esta é sempre a primeira pergunta — ela define todo o resto)
-2) Dados: tipo de cálculo, número do processo (se não tiver, vira pré-judicial), vara, tribunal, comarca, valor da causa, e o cliente/contato.
-3) Prazos e honorários: prazo de entrega, data de nomeação, tipo de honorário (fixo, hora, exito ou misto), valor, e se tem depósito judicial.
-Tipos de cálculo: Cálculos Cíveis, Bancários, Trabalhistas, Previdenciários, Tributários, Contábeis, Atuariais.
-Só atuação e tipo_acao são obrigatórios — o resto ele pode completar depois na tela; não trave a conversa por um campo opcional.
-NUNCA pergunte o status: ele é derivado da atuação automaticamente.
-Repita o resumo, pergunte "Confirma?" e só depois do sim adicione:
-<processo_criar>
-{"atuacao":"perito_contratado","tipo_acao":"Cálculos Trabalhistas","titulo":"Cálculo Maria Silva","numero":"","vara":"","comarca":"","valor_causa":null,"prazo_entrega":"2026-09-10","honorario_tipo":"fixo","honorario_valor":1500,"deposito_judicial":false,"contato_nome":"Maria Silva","contato_telefone":"","observacoes":""}
-</processo_criar>
+== ESCRITAS (FINANCEIRO E OPERA) ==
+Lançamento manual: financeiro_lancar. Baixa de conta: consulte financeiro_contas e use financeiro_dar_baixa. Compromisso: opera_agendar. Processo/cálculo: opera_criar_processo (atuação primeiro, um passo de cada vez, nunca pergunte o status).
+Colete o que faltar de forma natural antes de propor. Todas seguem as AÇÕES COM CONFIRMAÇÃO abaixo.
+Lançamento RECORRENTE ainda não existe por voz: ofereça lançar avulso.
 
 == INSTRUÇÕES DE MÚSICA (SPOTIFY) ==
 O usuário pode controlar o Spotify por voz. Quando ele pedir uma música/artista/banda (ex.: "toca AC/DC", "coloca uma do Metallica", ou responder a rotina da manhã com o nome de uma música), confirme naturalmente E adicione o bloco invisível:
@@ -376,6 +297,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
     if (cerebro && cerebro.disponivel()) extras.push(...cerebro.FERRAMENTAS);
     if (acoes && acoes.disponivel()) {
       extras.push(...acoes.FERRAMENTAS);
+      if (escritas) extras.push(...escritas.FERRAMENTAS);
       if (financeiroApp && financeiroApp.configurado()) extras.push(...financeiroApp.FERRAMENTAS);
     }
     const tools = [...toolDefs, ...extras.map(f => f.def)];
@@ -385,6 +307,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       ultimaFala: typeof ultimaMsg.content === 'string' ? ultimaMsg.content
         : Array.isArray(ultimaMsg.content) ? ultimaMsg.content.filter(b => b.type === 'text').map(b => b.text).join(' ') : '',
       origem: (req.body && req.body.origem) || 'tela',
+      userId,
     };
     const executarFerramenta = async (nome, input) => {
       const extra = extras.find(f => f.def.name === nome);
@@ -392,10 +315,16 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       try { return await extra.run(input || {}, ctxAcao); }
       catch (e) { console.error(`[nexus] ferramenta ${nome} falhou:`, e.message); return { erro: String(e.message || e) }; }
     };
-    if (webSearch) tools.push({ type: 'web_search_20250305', name: 'web_search' });
+    if (webSearch) tools.push({ type: 'web_search_20260209', name: 'web_search' });
+    /* O conector MCP precisa das duas metades: o servidor em mcp_servers e o
+       mcp_toolset em tools. Só o servidor é recusado no modelo atual. */
+    for (const m of mcp_servers) tools.push({ type: 'mcp_toolset', mcp_server_name: m.name });
 
     const headers = { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY || '', 'anthropic-version': '2023-06-01' };
-    if (mcp_servers.length) headers['anthropic-beta'] = 'mcp-client-2025-04-04';
+    /* Modelo de reserva quando o principal recusa (`fallbacks: "default"`). */
+    const betas = ['server-side-fallback-2026-07-01'];
+    if (mcp_servers.length) betas.push('mcp-client-2025-11-20');
+    headers['anthropic-beta'] = betas.join(',');
 
     const url = process.env.ANTHROPIC_TEST_URL || 'https://api.anthropic.com/v1/messages';
     const conversa = messages.slice();
@@ -406,8 +335,14 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
        O teto de voltas evita que uma ferramenta em erro vire loop infinito. */
     for (let volta = 0; volta < 6; volta++) {
       const payload = {
-        model: process.env.NEXUS_MODEL || 'claude-sonnet-4-6',
-        max_tokens: 1500,
+        /* Claude Opus 5.5 desde 17/10/2026. O raciocínio não se desliga nele:
+           quem controla a latência da voz é o esforço, `low` por padrão
+           (NEXUS_EFFORT troca sem deploy de código). max_tokens maior que o
+           antigo 1500 porque o raciocínio também gasta tokens. */
+        model: process.env.NEXUS_MODEL || 'claude-opus-5-5',
+        max_tokens: 4096,
+        output_config: { effort: process.env.NEXUS_EFFORT || 'low' },
+        fallbacks: 'default',
         system: enrichedSystem,
         messages: conversa
       };
@@ -422,6 +357,10 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       if (data.stop_reason === 'pause_turn') {
         conversa.push({ role: 'assistant', content: data.content });
         continue;
+      }
+      if (data.stop_reason === 'refusal') {
+        data.content = [{ type: 'text', text: 'Essa eu não consigo responder. Pode reformular?' }];
+        break;
       }
       if (data.stop_reason !== 'tool_use') break;
 
@@ -450,16 +389,11 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       const fullAnswer = data.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
 
       /* 1º: extrair os comandos invisíveis */
-      const mems = [...fullAnswer.matchAll(/<memory_extract>\s*categoria:\s*(.+?)\s*conteúdo:\s*(.+?)\s*<\/memory_extract>/gs)];
       const rcs  = [...fullAnswer.matchAll(/<routine_create>\s*trigger:\s*(.+?)\s*ação:\s*(.+?)\s*<\/routine_create>/gs)];
       const rds  = [...fullAnswer.matchAll(/<routine_delete>\s*(.+?)\s*<\/routine_delete>/gs)];
-      const lans = [...fullAnswer.matchAll(/<lancamento_criar>\s*([\s\S]+?)\s*<\/lancamento_criar>/g)];
       const spls = [...fullAnswer.matchAll(/<spotify_play>\s*(.+?)\s*<\/spotify_play>/gs)];
       const spcs = [...fullAnswer.matchAll(/<spotify_ctrl>\s*(.+?)\s*<\/spotify_ctrl>/gs)];
       const mks  = [...fullAnswer.matchAll(/<make_disparar>\s*([\s\S]+?)\s*<\/make_disparar>/g)];
-      const pags = [...fullAnswer.matchAll(/<pagamento_confirmar>\s*([\s\S]+?)\s*<\/pagamento_confirmar>/g)];
-      const ags  = [...fullAnswer.matchAll(/<agenda_criar>\s*([\s\S]+?)\s*<\/agenda_criar>/g)];
-      const prcs = [...fullAnswer.matchAll(/<processo_criar>\s*([\s\S]+?)\s*<\/processo_criar>/g)];
 
       /* 2º: limpar a resposta SEMPRE, antes de qualquer efeito no banco */
       const cleanAnswer = fullAnswer
@@ -473,15 +407,14 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
         .replace(/<pagamento_confirmar>[\s\S]*?<\/pagamento_confirmar>/g, '')
         .replace(/<agenda_criar>[\s\S]*?<\/agenda_criar>/g, '')
         .replace(/<processo_criar>[\s\S]*?<\/processo_criar>/g, '')
+        /* A resposta vira voz: negrito e título viram asterisco e cerquilha lidos em voz alta. */
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/^#{1,6}\s+/gm, '')
         .trim();
       data.content = [{ type: 'text', text: cleanAnswer }];
 
       /* 3º: efeitos no banco (se falharem, a resposta já está limpa) */
       if (userId) {
-        for (const m of mems) {
-          try { await db.addMemory(userId, m[1].trim(), m[2].trim(), savedUserMsg?.id); }
-          catch (e) { console.warn('[nexus] memória não salva:', e.message); }
-        }
         for (const m of rcs) {
           try { await createRoutine(userId, m[1].trim(), m[2].trim()); console.log('[nexus] rotina criada:', m[2].trim()); }
           catch (e) { console.warn('[nexus] rotina não criada:', e.message); }
@@ -491,19 +424,10 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
           catch (e) { console.warn('[nexus] rotina não removida:', e.message); }
         }
       }
-      /* lançamentos financeiros confirmados */
-      for (const m of lans) {
-        try {
-          const l = JSON.parse(m[1]);
-          const result = await lancarMovimentacao(l);
-          if (result && result.erro) throw new Error(result.erro);
-          if (result && result.message) throw new Error(result.message);
-          console.log('[nexus] lançamento gravado:', l.descricao, l.valor);
-        } catch (e) {
-          console.error('[nexus] lançamento FALHOU:', e.message);
-          data.content = [{ type: 'text', text: 'Atenção: não consegui gravar o lançamento no financeiro. Erro: ' + e.message + '. Nada foi salvo — tenta de novo ou lança manualmente.' }];
-        }
-      }
+      /* Lançamento, baixa, agenda e processo saíram daqui em 17/10/2026: viraram
+         ferramentas que propõem e esperam confirmação no servidor
+         (lib/escritas.js, lib/acoes.js). As etiquetas antigas ainda são
+         limpas do texto acima, mas NÃO executam mais nada. */
 
       /* Make: dispara automações confirmadas */
       for (const m of mks) {
@@ -516,27 +440,6 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
           console.error('[nexus] automação FALHOU:', e.message);
           data.content = [{ type: 'text', text: 'Não consegui disparar a automação: ' + e.message }];
         }
-      }
-
-      /* Escritas confirmadas (baixa de conta, agenda, processo).
-         Mesmo contrato do lançamento: se falhar, a resposta vira o aviso —
-         é pior o Marlos achar que gravou do que ouvir que não gravou. */
-      const gravar = async (matches, rotulo, fn) => {
-        for (const m of matches) {
-          try {
-            const dados = JSON.parse(m[1]);
-            const r = await fn(dados);
-            console.log(`[nexus] ${rotulo} gravado:`, JSON.stringify(r).slice(0, 160));
-          } catch (e) {
-            console.error(`[nexus] ${rotulo} FALHOU:`, e.message);
-            data.content = [{ type: 'text', text: `Atenção: não consegui ${rotulo}. ${e.message}. Nada foi salvo.` }];
-          }
-        }
-      };
-      if (negocios) {
-        await gravar(pags, 'dar baixa na conta', d => negocios.escrever.confirmarPagamento(d));
-        await gravar(ags, 'marcar o compromisso', d => negocios.escrever.criarEvento(d));
-        await gravar(prcs, 'abrir o processo', d => negocios.escrever.criarProcesso(d));
       }
 
       /* Spotify */
@@ -566,5 +469,8 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
 /* Só o dono, pela sessão do Nexus (lib/sessao.js). `interno` é o handler cru,
    para quem chama por dentro já autenticado por outro caminho (o WhatsApp). */
 const { comSessao } = require('../lib/sessao');
-module.exports = comSessao(atender);
+// O que o arquivo já exportava além da rota (ex.: make.hooks, usado pelo
+// chat) continua exportado: trocar module.exports apagava essas funções.
+const exportadosAntes = { ...module.exports };
+module.exports = Object.assign(comSessao(atender), exportadosAntes);
 module.exports.interno = atender;

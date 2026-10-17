@@ -12,7 +12,7 @@ const crypto = require('crypto');
 const vigia = require('../lib/vigia');
 
 const SB_URL = process.env.SUPABASE_URL;
-const SB_KEY = process.env.SUPABASE_ANON_KEY;
+const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 const JANELA_SILENCIO_H = Number(process.env.ALERTA_JANELA_HORAS || 10);
 
 function sbHeaders() {

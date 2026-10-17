@@ -134,5 +134,8 @@ async function atender(req, res) {
 /* Só o dono, pela sessão do Nexus (lib/sessao.js). `interno` é o handler cru,
    para quem chama por dentro já autenticado por outro caminho (o WhatsApp). */
 const { comSessao } = require('../lib/sessao');
-module.exports = comSessao(atender);
+// O que o arquivo já exportava além da rota (ex.: make.hooks, usado pelo
+// chat) continua exportado: trocar module.exports apagava essas funções.
+const exportadosAntes = { ...module.exports };
+module.exports = Object.assign(comSessao(atender), exportadosAntes);
 module.exports.interno = atender;

@@ -12,7 +12,7 @@ async function atender(req, res) {
       const id = (req.body && req.body.id) || '';
       if (!/^[0-9a-f-]{36}$/i.test(id)) { res.statusCode = 400; return res.end(JSON.stringify({ erro: 'id inválido' })); }
       await fetch(`${process.env.SUPABASE_URL}/rest/v1/memories?id=eq.${id}&user_id=eq.${user.id}`, {
-        method: 'DELETE', headers: { apikey: process.env.SUPABASE_ANON_KEY, authorization: `Bearer ${process.env.SUPABASE_ANON_KEY}` },
+        method: 'DELETE', headers: { apikey: (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY), authorization: `Bearer ${(process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)}` },
       });
       return res.end(JSON.stringify({ ok: true }));
     }
