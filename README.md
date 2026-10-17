@@ -92,10 +92,10 @@ GITHUB_TOKEN=$(gh auth token) SUPABASE_URL=... SUPABASE_SERVICE_KEY=... \
   node scripts/sincronizar-cerebros.mjs
 ```
 
-O cron `/api/cerebro-sync` (6h de Brasília) faz o mesmo todo dia, de forma
-incremental (só baixa o documento cujo sha mudou), quando existir
-`GITHUB_TOKEN_LEITURA`: token fine-grained com "Contents: Read-only" nos
-repositórios e nada mais. Sem ele o cron responde 503 e não faz nada.
+**Na hora, sem token:** cada repositório tem `.github/workflows/jarvis-cerebro.yml`.
+Quando um `.md` muda na `main`, o próprio GitHub manda os documentos alterados
+para `/api/cerebro-receber` (chave `JARVIS_CEREBRO_KEY`, guardada como segredo
+em cada repositório). O disparo manual do workflow manda todos.
 
 ⚠️ **O banco do Jarvis é fechado** (`sql/seguranca.sql`): RLS em todas as
 tabelas e nenhuma policy. Só a `SUPABASE_SERVICE_KEY` lê e escreve.

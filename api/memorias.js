@@ -17,13 +17,15 @@ async function atender(req, res) {
       return res.end(JSON.stringify({ ok: true }));
     }
     const desde = new Date(Date.now() - 14 * 86400000).toISOString();
-    const [memorias, acoes] = await Promise.all([
+    const [memorias, acoes, tarefas] = await Promise.all([
       db.query('memories', `user_id=eq.${user.id}&order=updated_at.desc&limit=200&select=id,category,content,updated_at`),
       db.query('acoes', `criada_em=gte.${desde}&order=criada_em.desc&limit=100&select=ferramenta,resumo,estado,origem,criada_em`),
+      db.query('tarefas_codigo', `estado=eq.aberta&order=criada_em.desc&limit=50&select=produto,titulo,descricao,issue_url,criada_em`),
     ]);
     return res.end(JSON.stringify({
       memorias: Array.isArray(memorias) ? memorias : [],
       acoes: Array.isArray(acoes) ? acoes : [],
+      tarefas: Array.isArray(tarefas) ? tarefas : [],
       regras_financeiro: (process.env.FINANCEIRO_APP_URL || '') + '/conferencia/regras',
     }));
   } catch (e) {

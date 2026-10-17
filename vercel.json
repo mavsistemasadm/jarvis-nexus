@@ -48,10 +48,6 @@
     {
       "path": "/api/rotina",
       "schedule": "0 19 * * 1-5"
-    },
-    {
-      "path": "/api/cerebro-sync",
-      "schedule": "0 9 * * *"
     }
   ]
 }

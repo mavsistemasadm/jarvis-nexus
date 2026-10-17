@@ -36,6 +36,9 @@
   <h2>Regras do Financeiro</h2>
   <div class="item"><div class="txt">As regras de classificação (favorecido → empresa, centro, categoria e produto) ficam no próprio Financeiro, junto com as que você cria pela tela de conferência.<div class="quando"><a id="linkRegras" href="#" target="_blank" rel="noopener">Abrir as regras no Financeiro</a></div></div></div>
 
+  <h2>Tarefas de código abertas</h2>
+  <div id="tarefas"><p class="vazio">Carregando...</p></div>
+
   <h2>O que ele fez nos últimos 14 dias</h2>
   <div id="acoes"><p class="vazio">Carregando...</p></div>
 </main>
@@ -62,6 +65,15 @@ function carregar() {
         fetch('/api/memorias', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: x.id }) }).then(carregar);
       };
       it.appendChild(t); it.appendChild(b); m.appendChild(it);
+    });
+    var tf = document.getElementById('tarefas'); tf.innerHTML = '';
+    if (!(d.tarefas || []).length) tf.appendChild(el('p', 'vazio', 'Nenhuma tarefa aberta. Peça ao Jarvis: "abre uma tarefa no Nexus para…".'));
+    (d.tarefas || []).forEach(function (x) {
+      var it = el('div', 'item'), t = el('div', 'txt');
+      t.appendChild(el('span', 'tag', x.produto)); t.appendChild(document.createTextNode(x.titulo));
+      t.appendChild(el('div', 'quando', x.descricao));
+      t.appendChild(el('div', 'quando', quando(x.criada_em) + (x.issue_url ? ' · ' + x.issue_url : '')));
+      it.appendChild(t); tf.appendChild(it);
     });
     var a = document.getElementById('acoes'); a.innerHTML = '';
     if (!d.acoes.length) a.appendChild(el('p', 'vazio', 'Nada nos últimos 14 dias.'));
