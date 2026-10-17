@@ -1,0 +1,28 @@
+# O cérebro do Jarvis (17/10/2026): quando um .md muda na main, os documentos
+# alterados vão para o índice do Jarvis (repositório jarvis-nexus,
+# api/cerebro-receber.js). Quem lê o repositório é o próprio GitHub; o Jarvis
+# não tem credencial do GitHub.
+name: Jarvis cérebro
+on:
+  push:
+    branches: [main]
+    paths: ['**/*.md']
+  workflow_dispatch:
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Enviar documentos alterados ao Jarvis
+        env:
+          JARVIS_CEREBRO_KEY: ${{ secrets.JARVIS_CEREBRO_KEY }}
+          PROJETO: ${{ github.event.repository.name }}
+          ANTES: ${{ github.event.before }}
+          TUDO: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node .github/jarvis-cerebro.mjs
