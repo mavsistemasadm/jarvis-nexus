@@ -837,6 +837,7 @@ speechSynthesis.onvoiceschanged=loadVoices;loadVoices();
 
 let currentAudio=null;
 function stopAudio(){
+  if(window.__fala){window.__fala.cancelar();window.__fala=null;}
   if(currentAudio){currentAudio.pause();currentAudio=null;}
   speechSynthesis.cancel();
 }
@@ -889,6 +890,87 @@ function speakBrowser(text){
     };
     next();
   });
+}
+
+/* ============ FALA EM FLUXO (19/10/2026) ============
+   O texto chega do servidor em pedaços enquanto o modelo escreve. A fila
+   separa frases prontas e manda cada uma à voz assim que termina, buscando o
+   áudio da próxima enquanto a anterior toca. Antes, a voz esperava o texto
+   inteiro e depois o áudio inteiro: era o maior atraso medido.
+   Etiquetas invisíveis (<spotify_play>…) nunca são faladas: o texto só é
+   considerado até a primeira etiqueta ainda aberta. */
+function criarFala(onDone){
+  let bruto='',falado=0,fila=[],tocando=false,acabou=false,cancelado=false,anterior='',comecou=false;
+  const ligada=document.getElementById('ttsOn').checked;
+  const comEL=voiceSel.value==='elevenlabs'&&!elIndisponivel;
+  const visivel=()=>{
+    let t=bruto.replace(/<(\w+)>[\s\S]*?<\/\1>/g,'');
+    const aberta=t.search(/<[a-z_]*(>[^<]*)?$/i);
+    if(aberta>=0)t=t.slice(0,aberta);
+    return t;
+  };
+  const limpar=(t)=>t.replace(/[*#_`>]/g,'').replace(/\s+/g,' ').trim();
+  function separar(final){
+    const v=visivel();
+    let resto=v.slice(falado);
+    for(;;){
+      // Frase pronta = pontuação seguida de espaço, com pelo menos 40
+      // caracteres: pedaço curto demais faz a voz soar picotada.
+      const re=/[.!?…:](?=\s)/g;let m,corte=-1;
+      while((m=re.exec(resto))){if(m.index+1>=40){corte=m.index+1;break;}}
+      if(corte<0)break;
+      const frase=limpar(resto.slice(0,corte));
+      falado+=corte;resto=resto.slice(corte);
+      if(frase)enfileirar(frase);
+    }
+    if(final){const r=limpar(resto);falado=v.length;if(r)enfileirar(r);}
+  }
+  function enfileirar(frase){
+    if(!ligada||cancelado)return;
+    const item={frase,audio:null};
+    if(comEL){
+      const prev=anterior;anterior=(anterior+' '+frase).slice(-1000);
+      item.audio=fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text:frase,previous_text:prev||undefined})})
+        .then(r=>{if(!r.ok)throw new Error('TTS '+r.status);return r.blob();})
+        .catch(e=>{console.warn('ElevenLabs falhou nesta frase, voz do navegador:',e.message||e);return null;});
+    }
+    fila.push(item);tocar();
+  }
+  async function tocar(){
+    if(tocando||cancelado)return;
+    const item=fila.shift();
+    if(!item){if(acabou)concluir();return;}
+    tocando=true;
+    if(!comecou){comecou=true;suppress=true;try{if(rec)rec.stop();}catch(e){}setState('speaking');}
+    const blob=item.audio?await item.audio:null;
+    if(cancelado)return;
+    await new Promise(res=>{
+      if(blob){
+        const url=URL.createObjectURL(blob);const a=new Audio(url);currentAudio=a;
+        const ok=()=>{currentAudio=null;URL.revokeObjectURL(url);res();};
+        a.onended=ok;a.onerror=ok;a.play().catch(ok);
+      }else{
+        const u=new SpeechSynthesisUtterance(item.frase);
+        const v=voices.find(v=>v.name===voiceSel.value)||vozMasculina();
+        if(v)u.voice=v;u.lang='pt-BR';u.rate=1.04;u.onend=res;u.onerror=res;
+        speechSynthesis.speak(u);
+      }
+    });
+    tocando=false;
+    if(!cancelado)tocar();
+  }
+  let feito=false;
+  function concluir(){if(feito)return;feito=true;if(window.__fala===api)window.__fala=null;setState('idle');onDone&&onDone();}
+  const api={
+    empurrar(delta){bruto+=delta;separar(false);},
+    separador(){if(bruto&&!/\s$/.test(bruto))bruto+=' ';},
+    visivel:()=>limpar(visivel()),
+    falouAlgo:()=>falado>0,
+    terminar(){acabou=true;separar(true);if(!ligada||(!tocando&&!fila.length))concluir();},
+    cancelar(){cancelado=true;fila=[];feito=true;},
+  };
+  return api;
 }
 
 async function speak(text,onDone){
@@ -953,48 +1035,12 @@ async function ask(text){
   history.push({role:'user',content:text});
   if(history.length>16)history=history.slice(-16);
 
-  /* ---- Dados financeiros: buscar antes de enviar pro Claude ---- */
-  let finData='';
-  const finWords=['fatur','receit','despes','saldo','conta','venc','atras','meta','vend','financ','gastou','gastamos','lucr','fluxo','pagamento','pagar','receber','empresa'];
-  const isFinancial=finWords.some(w=>text.toLowerCase().includes(w));
-  if(isFinancial){
-    try{
-      const actions=[];
-      if(/atras/i.test(text))actions.push({action:'contas_em_atraso'});
-      if(/venc/i.test(text))actions.push({action:'contas_a_vencer',dias:7});
-      if(/meta/i.test(text))actions.push({action:'faturamento_vs_meta'});
-      if(/despes|gast/i.test(text))actions.push({action:'top_despesas'});
-      if(/fluxo/i.test(text))actions.push({action:'fluxo_diario'});
-      if(actions.length===0)actions.push({action:'resumo_mensal'});
-      for(const a of actions){
-        const fr=await fetch('/api/financeiro',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(a)
-        });
-        const fd=await fr.json();
-        if(fd.data)finData+='\n[DADOS: '+a.action+'] '+JSON.stringify(fd.data);
-      }
-    }catch(e){console.warn('financeiro indisponível:',e);}
-  }
-
-  /* ---- Dados de anúncios (Meta/Facebook) ---- */
-  const adsWords=['anunc','ads','campanha','facebook','instagram','meta','trafego','tráfego','cpc','ctr','impress'];
-  if(adsWords.some(w=>text.toLowerCase().includes(w))){
-    try{
-      const periodo=/ontem/i.test(text)?'yesterday':/hoje/i.test(text)?'today':/semana|7 dia/i.test(text)?'last_7d':/mês passado|mes passado/i.test(text)?'last_month':'this_month';
-      const action=/campanha/i.test(text)?'campanhas':'resumo';
-      const fr=await fetch('/api/facebook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,periodo})});
-      const fd=await fr.json();
-      if(fd.data&&!fd.data.erro)finData+='\n[DADOS: facebook_ads '+fd.periodo+'] '+JSON.stringify(fd.data);
-      else if(fd.data&&fd.data.erro)finData+='\n[FACEBOOK ADS INDISPONÍVEL: '+fd.data.erro+']';
-    }catch(e){console.warn('facebook indisponível:',e);}
-  }
-
-  const lastMsg=history[history.length-1];
-  const enrichedHistory=finData
-    ?[...history.slice(0,-1),{role:'user',content:lastMsg.content+finData}]
-    :history;
+  /* As consultas ao financeiro e ao Facebook que rodavam AQUI, antes de
+     cada pergunta com "conta", "meta", "empresa" ou "venda", saíram em
+     19/10/2026: vinham de antes de o Jarvis ter ferramentas próprias, rodavam
+     uma depois da outra atrasando a fala, e enchiam o modelo de dados que ele
+     não pediu. Ele consulta sozinho o que precisar. */
+  const enrichedHistory=history;
 
   const sources=[...document.querySelectorAll('#panel input[data-mcp]:checked')].map(el=>el.dataset.mcp);
   const body={
@@ -1004,6 +1050,7 @@ async function ask(text){
     webSearch:document.getElementById('webSearch').checked
   };
 
+  let fala=null;
   try{
     /* Modo progresso (17/10/2026): o servidor manda um evento a cada
        ferramenta que consulta, e a resposta no evento `fim`. O status mostra
@@ -1018,6 +1065,8 @@ async function ask(text){
     let data=null;
     if((res.headers.get('content-type')||'').includes('text/event-stream')&&res.body){
       const leitor=res.body.getReader();const dec=new TextDecoder();let buf='';
+      stopAudio();
+      fala=criarFala(window.resumeWake);window.__fala=fala;let ultimaVolta=null;
       while(true){
         const {value,done}=await leitor.read();
         if(done)break;
@@ -1028,6 +1077,11 @@ async function ask(text){
           if(!bloco.startsWith('data: '))continue;
           let ev;try{ev=JSON.parse(bloco.slice(6));}catch(e){continue;}
           if(ev.tipo==='ferramenta')statusText.textContent=rotuloFerramenta(ev.nome);
+          else if(ev.tipo==='texto'){
+            if(ultimaVolta!==null&&ev.volta!==ultimaVolta)fala.separador();
+            ultimaVolta=ev.volta;fala.empurrar(ev.delta);
+            const v=fala.visivel();if(v)showCaption(v);
+          }
           else if(ev.tipo==='fim')data=ev;
         }
       }
@@ -1042,7 +1096,10 @@ async function ask(text){
     window.__music=!!data.musica;
     history.push({role:'assistant',content:answer});
     showCaption(answer);addLog('assistant',answer);
-    speak(answer,window.resumeWake);
+    // Já falou em fluxo: só termina a fila. Resposta trocada no servidor
+    // (erro do Spotify, recusa) ou que não veio em pedaços: fala inteira.
+    if(fala&&fala.falouAlgo()&&!data.substituida)fala.terminar();
+    else{if(fala)fala.cancelar();speak(answer,window.resumeWake);}
   }catch(err){
     console.error('[nexus] falha no ask():',err);
     /* A mensagem genérica escondia a causa: quem lia não sabia se era chave
@@ -1056,6 +1113,7 @@ async function ask(text){
     else if(/429|rate.?limit/i.test(cru))                            motivo='Limite de uso da API atingido.';
     else if(/5\d\d/.test(cru))                                       motivo='O servidor respondeu com erro: '+cru;
     else                                                             motivo=cru;
+    if(fala)fala.cancelar();
     const msg='Tive um problema ao processar. '+motivo;
     showCaption(msg);addLog('assistant',msg);
     history.pop();

@@ -80,6 +80,81 @@ async function spotifyAcao(acao, busca) {
   } catch (e) { return { erro: String(e.message || e) }; }
 }
 
+/* Teto do que uma ferramenta devolve ao modelo (19/10/2026). Tudo que entra
+   aqui é relido pelo modelo na volta seguinte, e um resultado gigante foi a
+   fala mais lenta medida (dezessete mil palavras-código para responder
+   "ontem"). Acima do teto, corta e AVISA, para ele não tratar o corte como
+   o todo. As ferramentas grandes devem resumir na origem; isto é a rede. */
+const TETO_SAIDA = Number(process.env.NEXUS_TETO_FERRAMENTA || 14000);
+function limitarSaida(nome, saida) {
+  const t = JSON.stringify(saida);
+  if (!t || t.length <= TETO_SAIDA) return t;
+  console.warn(`[nexus] ${nome} devolveu ${t.length} caracteres; cortado em ${TETO_SAIDA}`);
+  return t.slice(0, TETO_SAIDA) + `…(CORTADO: a resposta de ${nome} tinha ${t.length} caracteres. Diga que é parcial, ou consulte de novo com um filtro menor.)`;
+}
+
+/* ---- chamada ao modelo: inteira ou em fluxo (19/10/2026) ---- */
+async function chamarInteiro(url, headers, payload) {
+  const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+  return { r, data: await r.json() };
+}
+
+/* Remonta a mensagem a partir dos eventos do fluxo, com os blocos que o laço
+   de ferramentas precisa devolver intactos (pensamento com assinatura,
+   pedido de ferramenta com o input completo). Texto sai em `aoTexto` assim
+   que chega. Erro no meio do fluxo vira `data.type === 'error'`, como na
+   chamada inteira. */
+async function chamarEmFluxo(url, headers, payload, aoTexto) {
+  const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ ...payload, stream: true }) });
+  if (!r.ok || !r.body) return { r, data: await r.json().catch(() => ({ type: 'error', error: { message: `HTTP ${r.status}` } })) };
+  const msg = { content: [], stop_reason: null, usage: {} };
+  const jsonParcial = {};
+  const leitor = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  const tratar = (ev) => {
+    switch (ev.type) {
+      case 'message_start': Object.assign(msg, { id: ev.message.id, model: ev.message.model, usage: ev.message.usage || {} }); break;
+      case 'content_block_start': msg.content[ev.index] = { ...ev.content_block }; break;
+      case 'content_block_delta': {
+        const b = msg.content[ev.index]; const d = ev.delta;
+        if (!b) break;
+        if (d.type === 'text_delta') { b.text = (b.text || '') + d.text; aoTexto(d.text); }
+        else if (d.type === 'thinking_delta') b.thinking = (b.thinking || '') + d.thinking;
+        else if (d.type === 'signature_delta') b.signature = (b.signature || '') + d.signature;
+        else if (d.type === 'input_json_delta') jsonParcial[ev.index] = (jsonParcial[ev.index] || '') + d.partial_json;
+        else if (d.type === 'citations_delta') (b.citations = b.citations || []).push(d.citation);
+        break;
+      }
+      case 'content_block_stop':
+        if (jsonParcial[ev.index] !== undefined) {
+          try { msg.content[ev.index].input = JSON.parse(jsonParcial[ev.index] || '{}'); } catch { msg.content[ev.index].input = {}; }
+        }
+        break;
+      case 'message_delta':
+        if (ev.delta && ev.delta.stop_reason) msg.stop_reason = ev.delta.stop_reason;
+        if (ev.usage) msg.usage = { ...msg.usage, ...ev.usage };
+        break;
+      case 'error': msg.erroDoFluxo = ev.error; break;
+    }
+  };
+  for (;;) {
+    const { value, done } = await leitor.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const bloco = buf.slice(0, i); buf = buf.slice(i + 2);
+      const linha = bloco.split('\n').find(l => l.startsWith('data: '));
+      if (!linha) continue;
+      try { tratar(JSON.parse(linha.slice(6))); } catch (_) {}
+    }
+  }
+  if (msg.erroDoFluxo) return { r, data: { type: 'error', error: msg.erroDoFluxo } };
+  msg.content = msg.content.filter(Boolean);
+  return { r, data: msg };
+}
+
 /* ---- contexto temporal: o modelo não tem relógio ----
    Sem isso ele chuta "bom dia" às onze da noite. O período vem calculado
    daqui, no fuso de Brasília, não inferido de um timestamp cru. */
@@ -164,23 +239,35 @@ async function atender(req, res) {
         const user = await db.getOrCreateUser(userName);
         if (user && user.id) {
           userId = user.id;
-          session = await db.getOrCreateSession(user.id);
+          /* Em paralelo (19/10/2026): eram cinco idas ao banco em fila antes
+             de o modelo ser chamado, cada uma esperando a anterior, em toda
+             fala. Nenhuma depende da outra; só a gravação da fala precisa da
+             sessão, e vai logo depois. */
+          const [sessao, memories, routines, firstOfDay] = await Promise.all([
+            db.getOrCreateSession(user.id),
+            db.getMemories(user.id).catch(() => []),
+            getAllRoutines(user.id).catch(() => []),
+            process.env.NEXUS_TEST_FIRSTDAY === '1' ? true : db.isFirstOfDay(user.id).catch(() => false),
+          ]);
+          session = sessao;
 
-          const memories = await db.getMemories(user.id);
           if (memories && memories.length) {
             memoryBlock = '\n\n== MEMÓRIAS SOBRE O USUÁRIO (use naturalmente, sem citar que tem memórias) ==\n'
               + memories.map(m => `- [${m.category}] ${m.content}`).join('\n');
           }
 
           /* rotinas: sempre no contexto, pra listar/remover por voz */
-          const routines = await getAllRoutines(user.id);
           if (routines && routines.length) {
             routineBlock = '\n\n== ROTINAS ATIVAS DO USUÁRIO ==\n'
               + routines.map(r => `- [${r.trigger_type}] ${r.action}`).join('\n');
           }
 
+          const lastUserMsg = messages[messages.length - 1];
+          const gravarFala = session && session.id
+            ? db.saveMessage(session.id, 'user', lastUserMsg.content).catch(e => { console.warn('[nexus] fala não gravada:', e.message); return null; })
+            : Promise.resolve(null);
+
           /* primeira conversa do dia: briefing + executar rotinas first_of_day */
-          const firstOfDay = process.env.NEXUS_TEST_FIRSTDAY === '1' ? true : await db.isFirstOfDay(user.id);
           if (firstOfDay) {
             /* O bom dia completo (lib/briefing.js, formato aprovado em
                18/10/2026): o que precisa dele hoje, o dinheiro de ontem,
@@ -193,11 +280,7 @@ async function atender(req, res) {
               briefingBlock = '\n\n== PRIMEIRA CONVERSA DO DIA ==\nO bom dia completo falhou agora. Faça um briefing curto com o que houver abaixo e diga que o resto não deu para verificar.' + (dados || '');
             }
           }
-
-          if (session && session.id) {
-            const lastUserMsg = messages[messages.length - 1];
-            savedUserMsg = await db.saveMessage(session.id, 'user', lastUserMsg.content);
-          }
+          savedUserMsg = await gravarFala;
         }
       } catch (dbErr) {
         console.warn('[nexus] Supabase falhou, seguindo sem memória:', dbErr.message);
@@ -259,13 +342,19 @@ Só depois disso responda o que ele perguntou. Tudo junto, natural, sem soar pro
       } catch (e) { console.warn('[nexus] pendentes indisponíveis:', e.message); }
     }
 
-    const enrichedSystem = system
-      + makeHooksBlock()
+    /* O SISTEMA EM DUAS PARTES (19/10/2026). A primeira não muda entre uma
+       fala e outra (a personalidade que vem da tela e as instruções abaixo) e
+       fica guardada no cache do modelo junto com as ferramentas: era reenviada
+       e relida inteira a cada chamada, com zero reaproveitamento medido. A
+       segunda muda (a hora, as memórias, as ações pendentes, o bom dia) e vem
+       DEPOIS, para não quebrar o que está guardado. */
+    const sistemaDoMomento = makeHooksBlock()
       + pendentesBlock
       + memoryBlock
       + routineBlock
       + briefingBlock
-      + saudacaoBlock
+      + saudacaoBlock;
+    const sistemaFixo = system
       + `\n\n== MEMÓRIA ==
 Quando ele contar algo duradouro (preferência, pessoa, empresa, um jeito de classificar ou de decidir), guarde com memoria_guardar, sem anunciar. Ele vê e apaga tudo na tela de memórias.
 
@@ -385,14 +474,28 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
         max_tokens: 4096,
         output_config: { effort: process.env.NEXUS_EFFORT || 'low' },
         fallbacks: 'default',
-        system: enrichedSystem,
+        /* Ferramentas + parte fixa ficam no cache por 1 hora (o marcador no
+           fim da parte fixa cobre as duas, que vêm antes). O cache automático
+           do topo guarda o resto da conversa: dentro da mesma fala, a segunda
+           chamada (depois da ferramenta) relê tudo do cache. */
+        system: [
+          { type: 'text', text: sistemaFixo, cache_control: { type: 'ephemeral', ttl: '1h' } },
+          ...(sistemaDoMomento.trim() ? [{ type: 'text', text: sistemaDoMomento.trim() }] : []),
+        ],
+        cache_control: { type: 'ephemeral' },
         messages: conversa
       };
       if (mcp_servers.length) payload.mcp_servers = mcp_servers;
       if (tools.length) payload.tools = tools;
 
-      r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
-      data = await r.json();
+      /* Na tela (emStream), a resposta chega em pedaços e cada pedaço de texto
+         vai na hora para o navegador, que começa a falar na primeira frase
+         pronta, em vez de esperar o texto inteiro e depois o áudio inteiro.
+         WhatsApp e bom dia seguem pedindo a resposta inteira. */
+      ({ r, data } = emStream
+        ? await chamarEmFluxo(url, headers, payload, (delta) => emitir({ tipo: 'texto', volta, delta }))
+        : await chamarInteiro(url, headers, payload));
+      if (data && data.usage) console.log('[nexus] uso:', JSON.stringify({ volta, entrada: data.usage.input_tokens, cache_lido: data.usage.cache_read_input_tokens, cache_gravado: data.usage.cache_creation_input_tokens, saida: data.usage.output_tokens }));
       if (!data || !Array.isArray(data.content)) break;
 
       /* web_search estourou as iterações do servidor: devolve o turno e segue */
@@ -402,6 +505,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       }
       if (data.stop_reason === 'refusal') {
         data.content = [{ type: 'text', text: 'Essa eu não consigo responder. Pode reformular?' }];
+        data.substituida = true;
         break;
       }
       if (data.stop_reason !== 'tool_use') break;
@@ -419,7 +523,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
         return {
           type: 'tool_result',
           tool_use_id: p.id,
-          content: JSON.stringify(saida),
+          content: limitarSaida(p.name, saida),
           ...(saida && saida.erro ? { is_error: true } : {})
         };
       }));
@@ -482,18 +586,19 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
         } catch (e) {
           console.error('[nexus] automação FALHOU:', e.message);
           data.content = [{ type: 'text', text: 'Não consegui disparar a automação: ' + e.message }];
+          data.substituida = true;
         }
       }
 
       /* Spotify */
       for (const m of spls) {
         const r = await spotifyAcao('tocar', m[1].trim());
-        if (r && r.erro) data.content = [{ type: 'text', text: 'Não consegui tocar: ' + r.erro }];
+        if (r && r.erro) { data.content = [{ type: 'text', text: 'Não consegui tocar: ' + r.erro }]; data.substituida = true; }
         else if (r && r.tocando) { console.log('[nexus] tocando:', r.tocando); data.musica = true; }
       }
       for (const m of spcs) {
         const r = await spotifyAcao(m[1].trim());
-        if (r && r.erro) data.content = [{ type: 'text', text: 'Spotify: ' + r.erro }];
+        if (r && r.erro) { data.content = [{ type: 'text', text: 'Spotify: ' + r.erro }]; data.substituida = true; }
       }
 
       if (session && session.id) {

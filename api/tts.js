@@ -16,7 +16,7 @@ async function listarVozes(apiKey) {
 async function atender(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { text } = req.body || {};
+  const { text, previous_text } = req.body || {};
   if (!text) return res.status(400).json({ error: 'texto vazio' });
 
   /* Sem ID fixo de reserva. O antigo apontava para uma voz que não existe
@@ -35,9 +35,16 @@ async function atender(req, res) {
         'content-type': 'application/json',
         'accept': 'audio/mpeg'
       },
+      /* A fala chega em frases, uma de cada vez, enquanto o texto ainda está
+         sendo escrito (19/10/2026). O modelo `flash` gera em uma fração do
+         tempo do `multilingual_v2`, que era o mais lento do ElevenLabs.
+         `previous_text` dá a ele a frase anterior, para a entonação seguir
+         em vez de recomeçar a cada frase. ELEVENLABS_MODEL volta ao antigo
+         sem deploy, se a voz não agradar. */
       body: JSON.stringify({
         text: text.slice(0, 2500),
-        model_id: 'eleven_multilingual_v2',
+        ...(previous_text ? { previous_text: String(previous_text).slice(-1000) } : {}),
+        model_id: process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5',
         voice_settings: {
           stability: 0.65,
           similarity_boost: 0.82,
