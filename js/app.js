@@ -846,8 +846,15 @@ function stopAudio(){
    primeira falha o caminho fica desligado pela sessão: evita uma requisição
    condenada (e o atraso dela) antes de cada frase. */
 let elIndisponivel=false;
+/* Quando a voz escolhida falha, o Jarvis fica mudo e diz isso na tela, uma vez
+   por sessão, em vez de falar com a voz automática do navegador. */
+let vozForaAvisada=false;
+function avisarVozFora(){
+  if(vozForaAvisada)return;vozForaAvisada=true;
+  try{addLog('assistant','(A voz do ElevenLabs não respondeu agora. Estou só escrevendo até ela voltar.)');}catch(e){}
+}
 async function speakEL(text){
-  if(elIndisponivel)return speakBrowser(text);
+  if(elIndisponivel){avisarVozFora();return;}
   return new Promise(async(resolve)=>{
     try{
       const r=await fetch('/api/tts',{
@@ -865,8 +872,8 @@ async function speakEL(text){
       audio.play();
     }catch(e){
       elIndisponivel=true;
-      console.warn('ElevenLabs indisponível — usando voz do navegador a partir de agora:',e.message||e);
-      speakBrowser(text).then(resolve);
+      console.warn('ElevenLabs indisponível: sem voz, só o texto na tela:',e.message||e);
+      avisarVozFora();resolve();
     }
   });
 }
@@ -902,7 +909,7 @@ function speakBrowser(text){
 function criarFala(onDone){
   let bruto='',falado=0,fila=[],tocando=false,acabou=false,cancelado=false,anterior='',comecou=false,ultimoAudio=Promise.resolve();
   const ligada=document.getElementById('ttsOn').checked;
-  const comEL=voiceSel.value==='elevenlabs'&&!elIndisponivel;
+  const comEL=voiceSel.value==='elevenlabs';
   const visivel=()=>{
     let t=bruto.replace(/<(\w+)>[\s\S]*?<\/\1>/g,'');
     const aberta=t.search(/<[a-z_]*(>[^<]*)?$/i);
@@ -956,6 +963,11 @@ function criarFala(onDone){
         const url=URL.createObjectURL(blob);const a=new Audio(url);currentAudio=a;
         const ok=()=>{currentAudio=null;URL.revokeObjectURL(url);res();};
         a.onended=ok;a.onerror=ok;a.play().catch(ok);
+      }else if(comEL){
+        // O ElevenLabs falhou nesta frase: silêncio, e o texto fica na tela.
+        // A voz automática do navegador NUNCA substitui a escolhida (pedido do
+        // Marlos, 19/10/2026: "horrível, não é o que escolhi").
+        avisarVozFora();res();
       }else{
         const u=new SpeechSynthesisUtterance(item.frase);
         const v=voices.find(v=>v.name===voiceSel.value)||vozMasculina();
