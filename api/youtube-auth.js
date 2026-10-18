@@ -31,7 +31,7 @@ module.exports = async (req, res) => {
     }
     const r = await youtube.concluirAutorizacao(code);
     return pagina(res, 200, 'Pronto, o Jarvis cuida das suas lives',
-      `Canal conectado: <b>${String(r.canal || '').replace(/[<>&]/g, '')}</b>. Criei no YouTube Studio a chave de transmissão <b>${youtube.NOME_DA_CHAVE}</b>: ela é a que vai no OBS, uma vez só. Pode fechar esta página.`);
+      `Canal conectado: <b>${String(r.canal || '').replace(/[<>&]/g, '')}</b>. As lives vão usar a chave de transmissão <b>${youtube.NOME_DA_CHAVE}</b>, a que o canal já tem: ela é a que fica no OBS. Pode fechar esta página.`);
   } catch (e) {
     console.error('[youtube-auth]', e.message);
     return pagina(res, 500, 'Não deu certo desta vez', String(e.message).replace(/[<>&]/g, ''));

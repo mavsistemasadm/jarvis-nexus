@@ -313,7 +313,7 @@ verificar", nunca como "está limpo".
 
 Pedido do dono: ele só precisa estar presente. `academy_criar_live` agenda a
 transmissão no canal (lib/youtube.js), já ligada à chave fixa
-**"Jarvis (chave fixa do OBS)"** e com início e fim automáticos, e cria a live
+**"Lives Peritos Academy"** (a que o canal já tinha) e com início e fim automáticos, e cria a live
 na Academy com o link. Na hora, ele clica em "Iniciar transmissão" no OBS e a
 live entra no ar sozinha. No bom dia seguinte, a gravação vira `gravacao_url`
 na Academy (`registrarGravacoes`).
