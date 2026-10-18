@@ -285,3 +285,26 @@ Opera são lidos por um dono fixo no ambiente (`FINANCEIRO_USER_EMAIL`,
 - Histórico persistente (SQLite no server) e comandos de rotina ("Nexus, resumo do dia").
 - Modo quiosque: monitor dedicado no escritório, sempre ouvindo.
 - Empacotar como app de desktop (Electron/Tauri) para escuta fora do navegador.
+
+## O bom dia (18/10/2026)
+
+Formato aprovado pelo dono: na primeira conversa do dia o Jarvis cumprimenta,
+pergunta como ele está e a música, e entrega o bom dia, nesta ordem e pulando
+o que não tiver novidade:
+
+1. o que precisa dele hoje (prazos e compromissos, contas do dia e atrasadas,
+   lançamentos esperando classificação, WhatsApp esperando, ações esperando o "sim");
+2. o dinheiro de ontem (vendas do Nexus, entradas, checkouts abandonados);
+3. tráfego (gasto, cliques, compras, anúncio parado, prazos do diário de tráfego);
+4. Academy e Opera, só com novidade;
+5. uma recomendação do dia. Segunda-feira traz também o resumo da semana.
+
+Cabe em cerca de um minuto falado. Fonte que falhou é dita como "não consegui
+verificar", nunca como "está limpo".
+
+- `lib/briefing.js`: coleta (tudo em paralelo, cada fonte isolada), regras e texto.
+- `api/chat.js`: na primeira conversa do dia, usa `blocoParaChat()`.
+- `api/bom-dia.js`: cron das 8h de Brasília (`0 11 * * *`), escreve com o
+  modelo e manda no WhatsApp; sem WhatsApp, vai para o celular. Uma vez por dia
+  (tabela `alertas`, hash `bom-dia:AAAA-MM-DD`). `?teste=1` devolve o texto sem
+  enviar. Substituiu a rodada das 8h do vigia; a das 16h continua em `/api/rotina`.
