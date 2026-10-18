@@ -900,7 +900,7 @@ function speakBrowser(text){
    Etiquetas invisíveis (<spotify_play>…) nunca são faladas: o texto só é
    considerado até a primeira etiqueta ainda aberta. */
 function criarFala(onDone){
-  let bruto='',falado=0,fila=[],tocando=false,acabou=false,cancelado=false,anterior='',comecou=false;
+  let bruto='',falado=0,fila=[],tocando=false,acabou=false,cancelado=false,anterior='',comecou=false,ultimoAudio=Promise.resolve();
   const ligada=document.getElementById('ttsOn').checked;
   const comEL=voiceSel.value==='elevenlabs'&&!elIndisponivel;
   const visivel=()=>{
@@ -930,9 +930,15 @@ function criarFala(onDone){
     const item={frase,audio:null};
     if(comEL){
       const prev=anterior;anterior=(anterior+' '+frase).slice(-1000);
-      item.audio=fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+      // UMA chamada por vez ao ElevenLabs, cada frase esperando a anterior
+      // chegar: em paralelo ele recusa ("already_running", medido em
+      // produção em 18/10/2026). Ainda adianta: a próxima é buscada enquanto
+      // a atual toca. Recusa de plano (402) desliga o ElevenLabs na sessão,
+      // em vez de pedir e falhar a cada frase.
+      const antes=ultimoAudio;
+      item.audio=ultimoAudio=antes.then(()=>elIndisponivel?null:fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({text:frase,previous_text:prev||undefined})})
-        .then(r=>{if(!r.ok)throw new Error('TTS '+r.status);return r.blob();})
+        .then(r=>{if(r.status===402||r.status===401)elIndisponivel=true;if(!r.ok)throw new Error('TTS '+r.status);return r.blob();}))
         .catch(e=>{console.warn('ElevenLabs falhou nesta frase, voz do navegador:',e.message||e);return null;});
     }
     fila.push(item);tocar();
