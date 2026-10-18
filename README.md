@@ -308,3 +308,17 @@ verificar", nunca como "está limpo".
   modelo e manda no WhatsApp; sem WhatsApp, vai para o celular. Uma vez por dia
   (tabela `alertas`, hash `bom-dia:AAAA-MM-DD`). `?teste=1` devolve o texto sem
   enviar. Substituiu a rodada das 8h do vigia; a das 16h continua em `/api/rotina`.
+
+## As lives no YouTube (18/10/2026)
+
+Pedido do dono: ele só precisa estar presente. `academy_criar_live` agenda a
+transmissão no canal (lib/youtube.js), já ligada à chave fixa
+**"Jarvis (chave fixa do OBS)"** e com início e fim automáticos, e cria a live
+na Academy com o link. Na hora, ele clica em "Iniciar transmissão" no OBS e a
+live entra no ar sozinha. No bom dia seguinte, a gravação vira `gravacao_url`
+na Academy (`registrarGravacoes`).
+
+- Autorização: `/api/youtube-auth` (projeto Google Cloud "Jarvis YouTube", conta
+  do dono, app em produção para o token não vencer em 7 dias).
+- Token: tabela `integracoes` (sql/integracoes.sql), só a chave de serviço lê.
+- Env: `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`.

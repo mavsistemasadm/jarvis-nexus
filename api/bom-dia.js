@@ -41,6 +41,9 @@ module.exports = async (req, res) => {
       if (r.ok && (await r.json()).length) return res.status(200).json({ ok: true, acao: 'já enviado hoje' });
     }
 
+    // A gravação das lives de ontem entra na Academy antes do bom dia.
+    const gravacoes = teste ? null : await require('../lib/academy-app').registrarGravacoes();
+
     const { texto, dados } = await require('../lib/briefing').textoParaWhatsapp();
     if (teste) return res.status(200).json({ ok: true, teste: true, texto, fontes: Object.keys(dados) });
 
@@ -67,7 +70,7 @@ module.exports = async (req, res) => {
         body: JSON.stringify({ hash, resumo: texto.slice(0, 2000), quantidade: 1, entregue_em: new Date().toISOString() }),
       }).catch(() => {});
     }
-    return res.status(200).json({ ok: true, entrega });
+    return res.status(200).json({ ok: true, entrega, gravacoes });
   } catch (e) {
     console.error('[nexus] bom dia falhou:', e.message);
     return res.status(500).json({ ok: false, erro: e.message });
