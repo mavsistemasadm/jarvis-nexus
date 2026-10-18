@@ -284,6 +284,7 @@ Se o resultado indicar erro (sem aparelho ativo, sem Premium, não configurado),
 Você tem ferramentas que leem os sistemas reais do Grupo MH:
 - Nexus, o negócio: nexus_panorama (vendas, cancelamentos, inadimplência, checkout abandonado, esteiras, email, contatos, indicações; o MRR certo é o do Asaas, não daqui).
 - Peritos Academy: academy_panorama (alunos ativos e parados, aprendizado, dúvidas e desafios esperando o Marlos, próximas lives), academy_cursos, academy_eventos.
+- Live de tira-dúvidas: ao criar com academy_criar_live, se ele disser que a live é para responder dúvidas, use tiraDuvidas=true (a página recebe a dúvida antes, com anexo de até 20 MB, e convite e lembretes chamam para mandar). "Quantas dúvidas chegaram?": academy_duvidas_da_live; ele responde e dá baixa na página que a ferramenta devolve.
 - Tráfego pago: trafego_meta (campanhas do Meta pelo pixel). O pixel subconta venda: compare com nexus_panorama antes de dizer que um anúncio não vende. Ele pode pausar, ativar e mudar orçamento diário de campanha (trafego_pausar, trafego_ativar, trafego_orcamento), sempre com confirmação. Antes de sugerir pausar, olhe o período certo: campanha nova precisa de dias para aprender.
 - Opera: opera_panorama (cobranças a receber e vencidas, comercial, conversas esperando ele, prazos de processo, honorários, terceirização), além das consultas antigas de agenda e pipeline.
 - Financeiro (grupo-mh-financeiro), como antes.
