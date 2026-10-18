@@ -1066,7 +1066,7 @@ async function ask(text){
 /* O que aparece no status enquanto o Jarvis consulta cada coisa. */
 function rotuloFerramenta(nome){
   const r=[
-    [/^cerebro/,'lendo a documentação'],[/^financeiro_conferencia|^financeiro_opcoes/,'olhando a conferência'],
+    [/^bom_dia/,'preparando o seu bom dia'],[/^cerebro/,'lendo a documentação'],[/^financeiro_conferencia|^financeiro_opcoes/,'olhando a conferência'],
     [/^financeiro/,'consultando o financeiro'],[/^nexus_panorama/,'olhando o Nexus'],[/^academy/,'olhando a Academy'],
     [/^trafego/,'olhando os anúncios'],[/^email/,'no compositor de email'],[/^opera|^agenda|^processos|^pipeline|^whatsapp/,'consultando o Opera'],
     [/^confirmar_acao/,'gravando'],[/^web_search/,'pesquisando na web'],[/^memoria/,'anotando'],[/^abrir_tarefa/,'abrindo a tarefa'],

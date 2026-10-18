@@ -182,10 +182,16 @@ async function atender(req, res) {
           /* primeira conversa do dia: briefing + executar rotinas first_of_day */
           const firstOfDay = process.env.NEXUS_TEST_FIRSTDAY === '1' ? true : await db.isFirstOfDay(user.id);
           if (firstOfDay) {
-            const dados = await buildBriefing();
-            briefingBlock = '\n\n== PRIMEIRA CONVERSA DO DIA ==\n'
-              + 'Esta é a primeira interação de hoje. Comece a resposta com um briefing executivo CURTO (2-3 frases): situação do mês, contas vencendo em breve se houver, e como está a meta. Dados reais abaixo. Depois responda o que foi perguntado e execute as rotinas marcadas como first_of_day (ex.: se houver rotina de perguntar a música, pergunte ao final).'
-              + (dados || '\n(Financeiro indisponível agora — faça o briefing sem números.)');
+            /* O bom dia completo (lib/briefing.js, formato aprovado em
+               18/10/2026): o que precisa dele hoje, o dinheiro de ontem,
+               tráfego, Academy e Opera se houver novidade, e a recomendação. */
+            emitir({ tipo: 'ferramenta', nome: 'bom_dia' });
+            try { briefingBlock = await require('../lib/briefing').blocoParaChat(); }
+            catch (e) {
+              console.warn('[nexus] bom dia indisponível:', e.message);
+              const dados = await buildBriefing();
+              briefingBlock = '\n\n== PRIMEIRA CONVERSA DO DIA ==\nO bom dia completo falhou agora. Faça um briefing curto com o que houver abaixo e diga que o resto não deu para verificar.' + (dados || '');
+            }
           }
 
           if (session && session.id) {
