@@ -13,6 +13,14 @@ async function listarVozes(apiKey) {
   } catch (e) { return 'não consegui listar as vozes: ' + e.message; }
 }
 
+/* A frase anterior (previous_text) dá continuidade à entonação, mas a
+   documentação só a garante nos modelos v2 e flash. Nos v3/v4 não é mandada:
+   parâmetro desconhecido podia virar recusa da frase inteira. */
+/* Uma linha no log com o NOME da voz, na primeira fala de cada instância: a
+   variável guarda só o id, e é o nome que diz se é a voz certa. */
+let vozRegistrada = false;
+const aceitaContexto = (m) => /^eleven_(multilingual_v2|flash_v2)/.test(m);
+
 async function atender(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -27,6 +35,9 @@ async function atender(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'ELEVENLABS_API_KEY não configurada' });
   if (!voiceId) return res.status(500).json({ error: 'ELEVENLABS_VOICE_ID não configurada — ' + await listarVozes(apiKey) });
 
+  /* v4 Turbo desde 19/10/2026, com o plano pago: é o que o ElevenLabs indica
+     para tempo real (cerca de 100 ms) e tem a expressividade da v4. */
+  const modelo = process.env.ELEVENLABS_MODEL || 'eleven_v4_turbo';
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -40,11 +51,11 @@ async function atender(req, res) {
          tempo do `multilingual_v2`, que era o mais lento do ElevenLabs.
          `previous_text` dá a ele a frase anterior, para a entonação seguir
          em vez de recomeçar a cada frase. ELEVENLABS_MODEL volta ao antigo
-         sem deploy, se a voz não agradar. */
+         sem deploy, se a voz não agradar. (O modelo é escolhido acima.) */
       body: JSON.stringify({
         text: text.slice(0, 2500),
-        ...(previous_text ? { previous_text: String(previous_text).slice(-1000) } : {}),
-        model_id: process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5',
+        ...(previous_text && aceitaContexto(modelo) ? { previous_text: String(previous_text).slice(-1000) } : {}),
+        model_id: modelo,
         voice_settings: {
           stability: 0.65,
           similarity_boost: 0.82,
@@ -63,6 +74,12 @@ async function atender(req, res) {
       return res.status(r.status).json({ error: err + extra });
     }
 
+    if (!vozRegistrada) {
+      vozRegistrada = true;
+      fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { headers: { 'xi-api-key': apiKey } })
+        .then(v => v.json()).then(v => console.log(`[nexus] voz em uso: ${v.name || '?'} (${v.category || '?'}) · modelo ${modelo}`))
+        .catch(() => {});
+    }
     const buffer = Buffer.from(await r.arrayBuffer());
     res.setHeader('content-type', 'audio/mpeg');
     res.setHeader('content-length', buffer.length);
