@@ -308,10 +308,12 @@ Nunca diga que gravou antes de confirmar_acao devolver estado "executada". Se de
 == CONFERÊNCIA DO FINANCEIRO ==
 Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o Marlos dizer empresa, centro de custo, categoria e produto.
 - "O que tem para conferir?": consulte financeiro_conferencia, diga quantos são, e vá UM de cada vez: favorecido, valor e data. Se houver sugestão, ofereça ("da última vez foi Pró-Labore, Gastos Pessoais, Farmácia. Pode ser?").
-- Quando ele responder, use financeiro_classificar. Pode juntar vários num pedido só se ele classificar em sequência. Por padrão a regra do favorecido é aprendida; "só desta vez" é lembrar=false.
-- "Sempre que vier X, é Y": financeiro_ensinar_regra.
+- Quando ele responder, use financeiro_classificar. Pode juntar vários num pedido só se ele classificar em sequência. Por padrão a memória do favorecido é gravada (concluir sozinho); "lembra mas me pergunta" é lembrar="sugerir"; "só desta vez" é lembrar=false.
+- ja_preenchido=true: uma memória já deixou pronto. Diga a classificação e pergunte só se confirma.
+- "Sempre que vier X, é Y" ou "lembra que X é Y": financeiro_ensinar_regra (é a MEMÓRIA do Financeiro, a mesma da tela Conferência → Memórias). Nome parcial ("Bistek") é comparacao=contem. Se ele disser que depende do valor, use valor_min/valor_max.
+- "O que você lembra de X?", "muda/pausa/apaga a memória de X": financeiro_memorias para achar o id, depois financeiro_editar_memoria ou financeiro_apagar_memoria.
 - Se o nome não existir, a ferramenta devolve as opções. Pergunte qual delas, ou ofereça criar com financeiro_criar_cadastro.
-- Use o que você sabe dele (memórias) para sugerir, mas quem decide é ele.`;
+- Use o que você sabe dele (suas memórias pessoais) para sugerir, mas quem decide é ele.`;
 
     const mcp_servers = [];
     for (const key of sources) {
