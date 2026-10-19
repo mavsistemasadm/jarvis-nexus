@@ -97,7 +97,10 @@ async function tocar(busca) {
   });
   if (r.status === 404) {
     const d = await spFetch(token, '/me/player/devices');
-    const aparelho = (d.devices || [])[0];
+    // O próprio Jarvis (js/spotify-player.js) primeiro: se a página está
+    // aberta, é onde o dono está. Senão, o primeiro aparelho aberto.
+    const lista = d.devices || [];
+    const aparelho = lista.find((x) => x.name === 'Jarvis') || lista[0];
     if (aparelho) {
       r = await fetch(`${SP_API}/v1/me/player/play?device_id=${encodeURIComponent(aparelho.id)}`, {
         method: 'PUT',
@@ -130,7 +133,8 @@ async function atender(req, res) {
   /* GET /api/spotify/login → manda pro consentimento do Spotify */
   if (req.method === 'GET' && url.includes('/login')) {
     if (!c.id) return res.status(500).json({ error: 'defina SPOTIFY_CLIENT_ID no .env' });
-    const scopes = 'user-modify-playback-state user-read-playback-state';
+    // streaming + email + private: o Jarvis toca no navegador (js/spotify-player.js).
+    const scopes = 'user-modify-playback-state user-read-playback-state streaming user-read-email user-read-private';
     const auth = `${SP_ACCOUNTS}/authorize?client_id=${c.id}&response_type=code&redirect_uri=${encodeURIComponent(c.redirect)}&scope=${encodeURIComponent(scopes)}`;
     res.setHeader('location', auth);
     return res.status(302).end();
@@ -155,6 +159,13 @@ async function atender(req, res) {
     return res.status(200).end(`<body style="font-family:sans-serif;background:#0a0f1e;color:#dbe7ff;padding:40px">
       <h2>✅ Spotify conectado ao Jarvis</h2>
       <p>Pode fechar esta aba e pedir uma música para ele. Deixe o Spotify aberto em algum aparelho.</p></body>`);
+  }
+
+  /* GET /api/spotify/token → o token de acesso para o tocador da página
+     (Web Playback SDK). Só o dono chega aqui (comSessao); vale uma hora. */
+  if (req.method === 'GET' && url.includes('/token')) {
+    try { return res.status(200).json({ token: await accessToken() }); }
+    catch (e) { return res.status(200).json({ token: null, motivo: String(e.message || e) }); }
   }
 
   /* GET /api/spotify/status → conectado? qual aparelho está ativo? */
