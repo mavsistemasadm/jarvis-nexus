@@ -1,4 +1,8 @@
-/* NEXUS → bom-dia: o bom dia no WhatsApp, às 8h de Brasília (18/10/2026).
+/* NEXUS → bom-dia: o bom dia no WhatsApp, às 9h de Brasília (19/10/2026).
+   ⚠️ SÓ SE ELE NÃO FALOU COM O JARVIS ATÉ AS 9h: a primeira conversa do dia
+   grava a mesma marca `bom-dia:AAAA-MM-DD` (api/chat.js, marcarBomDiaNoChat),
+   e aí esta rodada fica calada. Era às 8h, todo dia, mesmo depois da conversa.
+   Histórico: (18/10/2026)
 
    Pedido do dono: o mesmo bom dia da primeira conversa (lib/briefing.js)
    chegando sozinho por mensagem às 8h, todos os dias. Substitui a rodada das

@@ -67,6 +67,20 @@ function makeHooksBlock() {
     + '\nQuando o usuário pedir uma dessas ações, confirme naturalmente E adicione o bloco invisível:\n<make_disparar>\n{"nome":"nomedaacao","dados":{"campo":"valor"}}\n</make_disparar>\nPreencha "dados" com as informações que ele ditou (nomes de campos simples em minúsculas). Se faltar informação essencial, pergunte antes.';
 }
 
+/* O bom dia foi dado na conversa (19/10/2026): grava a marca do dia, e o
+   bom dia por WhatsApp das 9h fica calado. Ver api/bom-dia.js. */
+async function marcarBomDiaNoChat() {
+  const url = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) return;
+  const dia = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const h = { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' };
+  const r = await fetch(`${url}/rest/v1/alertas?hash=eq.bom-dia:${dia}&select=id&limit=1`, { headers: h });
+  if (r.ok && (await r.json()).length) return;
+  await fetch(`${url}/rest/v1/alertas`, { method: 'POST', headers: h,
+    body: JSON.stringify({ hash: `bom-dia:${dia}`, resumo: 'bom dia dado na conversa com o Jarvis', quantidade: 1, entregue_em: new Date().toISOString() }) });
+}
+
 /* ---- Spotify por voz ---- */
 async function spotifyAcao(acao, busca) {
   try {
@@ -276,6 +290,9 @@ async function atender(req, res) {
                18/10/2026): o que precisa dele hoje, o dinheiro de ontem,
                tráfego, Academy e Opera se houver novidade, e a recomendação. */
             emitir({ tipo: 'ferramenta', nome: 'bom_dia' });
+            // O bom dia aconteceu na conversa: o do WhatsApp das 9h (api/bom-dia)
+            // não sai hoje. Mesma marca que ele grava: `bom-dia:AAAA-MM-DD`.
+            marcarBomDiaNoChat().catch(e => console.warn('[nexus] marca do bom dia não gravada:', e.message));
             try { briefingBlock = await require('../lib/briefing').blocoParaChat(); }
             catch (e) {
               console.warn('[nexus] bom dia indisponível:', e.message);
@@ -328,7 +345,7 @@ async function atender(req, res) {
 Esta é a primeira fala desta sessão. Antes de responder o que ele pediu, abra como o mordomo que você é, nesta ordem e em poucas frases:
 1) Cumprimente com "${t.saudacao}" e o nome dele. Varie o jeito a cada sessão — nunca repita a mesma fórmula duas vezes seguidas.
 2) Pergunte se está tudo certo com ele.
-3) Pergunte qual música ele quer para ${t.periodo === 'manhã' ? 'começar o dia' : t.periodo === 'tarde' ? 'embalar a tarde' : 'fechar a noite'}.
+3) Pergunte qual música ele quer para ${t.periodo === 'manhã' ? 'começar o dia' : t.periodo === 'tarde' ? 'embalar a tarde' : 'fechar a noite'}${briefingBlock ? ', e, junto, qual relatório ele quer ouvir primeiro (Nexxus, MH ou Academy), como manda o bom dia abaixo' : ''}.
 Se ele responder com um artista ou música, use a tag do Spotify normalmente.
 Só depois disso responda o que ele perguntou. Tudo junto, natural, sem soar protocolar nem virar lista — é uma pessoa falando.`;
     }

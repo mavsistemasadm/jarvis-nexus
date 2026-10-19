@@ -51,7 +51,7 @@
   "crons": [
     {
       "path": "/api/bom-dia",
-      "schedule": "0 11 * * *"
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/rotina",

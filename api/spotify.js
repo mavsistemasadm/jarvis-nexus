@@ -178,3 +178,15 @@ const { comSessao } = require('../lib/sessao');
 const exportadosAntes = { ...module.exports };
 module.exports = Object.assign(comSessao(atender), exportadosAntes);
 module.exports.interno = atender;
+
+/* O estado da conexão, para o bom dia dizer se a música vai tocar. */
+module.exports.status = async () => {
+  try {
+    const token = await accessToken();
+    const d = await spFetch(token, '/me/player/devices');
+    const ativo = (d.devices || []).find((x) => x.is_active) || null;
+    return { conectado: true, aparelhos: (d.devices || []).map((x) => x.name), ativo: ativo && ativo.name };
+  } catch (e) {
+    return { conectado: false, motivo: String(e.message || e) };
+  }
+};
