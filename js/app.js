@@ -1033,22 +1033,89 @@ Se vierem dados junto da mensagem (entre colchetes [DADOS:...]), use-os para res
 let history=[];
 const caption=document.getElementById('caption');
 const logEl=document.getElementById('log')||document.createElement('div');
+const logLista=document.getElementById('logLista')||logEl;
 
 function showCaption(text,who){
   caption.innerHTML=(who==='user'?'<span class="you">Você</span>':'')+text.replace(/</g,'&lt;');
 }
-function addLog(who,text){
-  const d=document.createElement('div');
-  d.className='msg '+who;
-  d.innerHTML=`<span class="who">${who==='user'?'Você':'Nexus'}</span>${text.replace(/</g,'&lt;')}`;
-  logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;
+
+/* ══ CARTÕES E HISTÓRICO (19/10/2026) ══════════════════════════════
+   O servidor manda um cartão quando a resposta tem números de tráfego ou uma
+   ação esperando o "sim" (lib/cartoes.js). A esfera não muda: o cartão fica
+   por cima, com fundo translúcido. O histórico de hoje fica neste navegador
+   (localStorage, por dia), com o botão de reabrir a tabela de cada resposta. */
+const esc=(t)=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cartaoEl=document.getElementById('cartao');
+let cartoesAbertos=[],cartaoAtual=0;
+
+function htmlTabela(c){
+  const cab=c.colunas.map(k=>`<th class="${k.num?'num':''}">${esc(k.rotulo)}</th>`).join('');
+  const corpo=c.grupos.map(g=>(g.titulo?`<tr class="c-grupo"><td colspan="${c.colunas.length}">${esc(g.titulo)}</td></tr>`:'')+
+    g.linhas.map(l=>'<tr>'+l.map((v,i)=>`<td class="${c.colunas[i]&&c.colunas[i].num?'num':''}${v==='Ativa'||v==='ativa'?' ativa':''}">${esc(v)}</td>`).join('')+'</tr>').join('')).join('');
+  return `<table><thead><tr>${cab}</tr></thead><tbody>${corpo}</tbody></table>${c.nota?`<p class="c-nota">${esc(c.nota)}</p>`:''}`;
 }
+function desenharCartao(){
+  const c=cartoesAbertos[cartaoAtual];
+  if(!c){cartaoEl.hidden=true;cartaoEl.innerHTML='';return;}
+  const nav=cartoesAbertos.length>1?`<span>${cartaoAtual+1} de ${cartoesAbertos.length}</span>
+    <button class="icone" data-c="ant" aria-label="Cartão anterior"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="icone" data-c="prox" aria-label="Próximo cartão"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>`:'';
+  const fechar=`<button class="icone" data-c="fechar" aria-label="Fechar cartão"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+  if(c.tipo==='confirmar'){
+    cartaoEl.innerHTML=`<div class="c-topo"><div></div><div class="c-nav">${nav}${fechar}</div></div>
+      <div class="confirmar"><span class="rotulo">Antes de mexer, confere comigo</span>
+      <p class="resumo">${esc(c.resumo)}</p>
+      <div class="botoes"><button class="b-sim" data-c="sim">Confirmar</button><button class="b-nao" data-c="nao">Cancelar</button></div>
+      <p class="dica">Pode responder falando "sim" ou "não".</p></div>`;
+  }else{
+    cartaoEl.innerHTML=`<div class="c-topo"><div><h2>${esc(c.titulo)}</h2>${c.subtitulo?`<div class="c-sub">${esc(c.subtitulo)}</div>`:''}</div><div class="c-nav">${nav}${fechar}</div></div>${htmlTabela(c)}`;
+  }
+  cartaoEl.hidden=false;
+}
+function mostrarCartoes(lista,ultimo){
+  if(!lista||!lista.length)return;
+  cartoesAbertos=lista.slice();cartaoAtual=ultimo?lista.length-1:0;desenharCartao();
+}
+function fecharCartao(){cartoesAbertos=[];desenharCartao();}
+cartaoEl.addEventListener('click',e=>{
+  const b=e.target.closest('[data-c]');if(!b)return;
+  const a=b.dataset.c;
+  if(a==='fechar')fecharCartao();
+  else if(a==='ant'){cartaoAtual=(cartaoAtual-1+cartoesAbertos.length)%cartoesAbertos.length;desenharCartao();}
+  else if(a==='prox'){cartaoAtual=(cartaoAtual+1)%cartoesAbertos.length;desenharCartao();}
+  // O "sim" vai como fala do dono: é o servidor (lib/acoes.js) que confere.
+  else if(a==='sim'){fecharCartao();ask('Sim, confirmo.');}
+  else if(a==='nao'){fecharCartao();ask('Não, cancela.');}
+});
+
+const CHAVE_HIST='jarvis-historico-'+new Date().toLocaleDateString('en-CA');
+let registro=[];
+try{registro=JSON.parse(localStorage.getItem(CHAVE_HIST)||'[]')||[];}catch(e){registro=[];}
+function guardarRegistro(){try{localStorage.setItem(CHAVE_HIST,JSON.stringify(registro.slice(-80)));}catch(e){}}
+function desenharLog(){
+  if(!registro.length){logLista.innerHTML='<p class="vazio">Nada por aqui ainda hoje.</p>';return;}
+  logLista.innerHTML=registro.map((m,i)=>`<div class="msg ${m.quem}">${esc(m.texto)}${m.cartoes&&m.cartoes.length?`<br><button class="reabrir" data-i="${i}">Abrir ${m.cartoes.length>1?'as tabelas':'a tabela'} de novo</button>`:''}<span class="hora">${esc(m.hora)}</span></div>`).join('');
+  logLista.scrollTop=logLista.scrollHeight;
+}
+logLista.addEventListener('click',e=>{
+  const b=e.target.closest('.reabrir');if(!b)return;
+  const m=registro[Number(b.dataset.i)];
+  if(m&&m.cartoes){mostrarCartoes(m.cartoes.filter(c=>c.tipo!=='confirmar'),false);logEl.classList.remove('open');}
+});
+function addLog(who,text,cartoes){
+  registro.push({quem:who,texto:text,hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+    cartoes:(cartoes||[]).filter(c=>c.tipo!=='confirmar')});
+  guardarRegistro();desenharLog();
+}
+desenharLog();
 
 async function ask(text){
   if(!text)return;
   audioInit();
   document.getElementById('textIn').value='';
   showCaption(text,'user');addLog('user',text);
+  fecharCartao();
+  const cartoesDaResposta=[];
   setState('thinking');
   history.push({role:'user',content:text});
   if(history.length>16)history=history.slice(-16);
@@ -1095,6 +1162,7 @@ async function ask(text){
           if(!bloco.startsWith('data: '))continue;
           let ev;try{ev=JSON.parse(bloco.slice(6));}catch(e){continue;}
           if(ev.tipo==='ferramenta')statusText.textContent=rotuloFerramenta(ev.nome);
+          else if(ev.tipo==='cartao'){cartoesDaResposta.push(ev.cartao);mostrarCartoes(cartoesDaResposta,true);}
           else if(ev.tipo==='texto'){
             if(ultimaVolta!==null&&ev.volta!==ultimaVolta)fala.separador();
             ultimaVolta=ev.volta;fala.empurrar(ev.delta);
@@ -1113,7 +1181,9 @@ async function ask(text){
       .map(b=>b.text).join('\n').trim()||'Não consegui gerar uma resposta agora.';
     window.__music=!!data.musica;
     history.push({role:'assistant',content:answer});
-    showCaption(answer);addLog('assistant',answer);
+    // Resposta comum (sem fluxo) traz os cartões no fim.
+    if(!cartoesDaResposta.length&&Array.isArray(data.cartoes)){cartoesDaResposta.push(...data.cartoes);mostrarCartoes(cartoesDaResposta,true);}
+    showCaption(answer);addLog('assistant',answer,cartoesDaResposta);
     // Já falou em fluxo: só termina a fila. Resposta trocada no servidor
     // (erro do Spotify, recusa) ou que não veio em pedaços: fala inteira.
     if(fala&&fala.falouAlgo()&&!data.substituida)fala.terminar();
@@ -1156,6 +1226,14 @@ document.getElementById('send').onclick=()=>ask(document.getElementById('textIn'
 document.getElementById('textIn').addEventListener('keydown',e=>{if(e.key==='Enter')ask(e.target.value.trim());});
 document.getElementById('gear').onclick=()=>document.getElementById('panel').classList.toggle('open');
 if(document.getElementById('logToggle'))document.getElementById('logToggle').onclick=()=>logEl.classList.toggle('open');
+document.getElementById('histBtn').onclick=()=>logEl.classList.toggle('open');
+document.getElementById('logFechar').onclick=()=>logEl.classList.remove('open');
+// ESC fecha o que estiver aberto por cima da esfera, sem mexer na conversa.
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(logEl.classList.contains('open'))logEl.classList.remove('open');
+  else if(!cartaoEl.hidden)fecharCartao();
+});
 
 const PALETTES={
   blue:{deep:[0.01,0.05,0.28],mid:[0.08,0.35,1.0],hot:[0.55,0.85,1.0],white:[1,1,1],

@@ -93,3 +93,66 @@
 
 /* Atalho para "O que o Jarvis sabe" (memorias.html), acima da engrenagem. */
 #linkMemorias{position:fixed;right:22px;bottom:84px;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--text-dim);font-size:16px;display:flex;align-items:center;justify-content:center;text-decoration:none}
+
+/* ══ TELA NOVA (19/10/2026) ══════════════════════════════════════
+   Pedido do dono: a esfera fica exatamente como é; o que muda é o que fica
+   em volta dela. Status legível, ícones de traço no lugar dos emojis, legenda
+   com fundo (antes brigava com o anel), cartões com os números e a ação a
+   confirmar, e o histórico de hoje na lateral. */
+#hud-top{align-items:center;padding:16px 22px}
+#hud-top .brand{position:absolute;left:50%;transform:translateX(-50%);font-size:13px;letter-spacing:.32em;color:#9fb3cf;font-weight:600}
+#status{font-size:13px;letter-spacing:.06em;text-transform:none;color:#c9d6ea;background:rgba(4,10,22,.55);border:1px solid var(--line);padding:8px 12px;border-radius:999px;backdrop-filter:blur(8px)}
+#status .dot{width:8px;height:8px}
+.hud-acoes{display:flex;gap:8px;pointer-events:auto}
+.icone{width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:#afc0da;display:grid;place-items:center;cursor:pointer;text-decoration:none;backdrop-filter:blur(8px);transition:color .2s,border-color .2s}
+.icone:hover{color:#e8eef8;border-color:rgba(159,220,255,.45)}
+.icone svg{width:20px;height:20px}
+#kbd,#gear,#linkMemorias{position:static;font-size:0}
+#panel{top:70px;bottom:auto}
+
+#caption{background:rgba(3,7,17,.62);border:1px solid rgba(79,141,255,.12);border-radius:16px;padding:12px 18px;backdrop-filter:blur(10px);text-shadow:none}
+#caption:empty{display:none}
+
+#cartao{position:fixed;left:50%;top:78px;transform:translateX(-50%);z-index:5;width:min(980px,94vw);max-height:calc(100vh - 290px);overflow:auto;
+  background:rgba(6,12,26,.86);border:1px solid rgba(79,141,255,.22);border-radius:20px;padding:22px 24px;backdrop-filter:blur(14px);box-shadow:0 30px 80px rgba(0,0,0,.45);
+  animation:cartaoEntra .25s ease-out}
+#cartao[hidden]{display:none}
+@keyframes cartaoEntra{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+#cartao .c-topo{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+#cartao h2{font-size:18px;font-weight:600;color:#e8eef8;letter-spacing:0}
+#cartao .c-sub{font-size:13px;color:#8a96ab;margin-top:2px}
+#cartao .c-nav{display:flex;gap:6px;align-items:center;color:#8a96ab;font-size:12px}
+#cartao table{width:100%;border-collapse:collapse;font-size:14px}
+#cartao th{font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:#6f7c93;text-align:left;padding:0 10px 8px 0;border-bottom:1px solid rgba(79,141,255,.18);white-space:nowrap}
+#cartao td{padding:9px 10px 9px 0;border-bottom:1px solid rgba(79,141,255,.08);color:#dbe5f3;vertical-align:top}
+#cartao .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+#cartao .c-grupo td{padding-top:14px;font-size:12px;font-weight:600;color:#9fb3cf;border-bottom:0}
+#cartao .c-nota{margin-top:12px;font-size:12px;color:#6f7c93}
+#cartao .ativa{color:#7fd9a8}
+#cartao .confirmar{display:flex;flex-direction:column;gap:16px;max-width:560px;margin:0 auto}
+#cartao .confirmar .rotulo{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6f7c93}
+#cartao .confirmar .resumo{font-size:18px;line-height:1.45;color:#e8eef8}
+#cartao .confirmar .botoes{display:flex;gap:10px}
+#cartao .confirmar button{flex:1;height:48px;border-radius:12px;font:inherit;font-size:15px;cursor:pointer}
+#cartao .b-sim{border:0;background:#e8eef8;color:#071022;font-weight:600}
+#cartao .b-nao{border:1px solid rgba(79,141,255,.3);background:transparent;color:#cfe0f5}
+#cartao .confirmar .dica{font-size:13px;color:#8a96ab}
+
+#log{left:auto;right:0;top:0;bottom:0;width:min(420px,92vw);max-height:none;border-radius:0;border-width:0 0 0 1px;padding:0;z-index:15;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease-out}
+#log.open{transform:none;display:flex}
+#log .log-topo{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 14px 22px;border-bottom:1px solid var(--line)}
+#log h2{font-size:15px;font-weight:600;color:#e8eef8}
+#logLista{flex:1;overflow:auto;padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+#logLista .msg{margin:0;font-size:14px;line-height:1.5}
+#logLista .msg.user{align-self:flex-end;max-width:85%;background:#13325e;padding:9px 13px;border-radius:14px 14px 4px 14px;color:#e8eef8}
+#logLista .msg.assistant{color:#cfd9ea}
+#logLista .msg .hora{display:block;font-size:11px;color:#5d6a80;margin-top:4px}
+#logLista .msg .reabrir{margin-top:8px;height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:#0a1324;color:#9fd4ff;font:inherit;font-size:13px;cursor:pointer}
+#logLista .vazio{color:#6f7c93;font-size:14px}
+
+@media (max-width:640px){
+  #hud-top .brand{display:none}
+  #cartao{top:70px;padding:16px;max-height:calc(100vh - 260px)}
+  #cartao table{font-size:13px}
+}
+@media (prefers-reduced-motion:reduce){#cartao{animation:none}#log{transition:none}}

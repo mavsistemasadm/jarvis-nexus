@@ -214,6 +214,7 @@ async function atender(req, res) {
      Quase todo o tempo é ferramenta, não texto: mostrar o passo é o que tira
      a sensação de travado. Sem `stream`, tudo como antes (o WhatsApp usa assim). */
   const emStream = !!stream && typeof res.write === 'function';
+  const cartoes = [];
   const emitir = (o) => { if (emStream) { try { res.write(`data: ${JSON.stringify(o)}\n\n`); } catch (_) {} } };
   if (emStream) {
     res.statusCode = 200;
@@ -525,6 +526,10 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
         emitir({ tipo: 'ferramenta', nome: p.name });
         const saida = await executarFerramenta(p.name, p.input);
         console.log('[nexus] consulta:', p.name, JSON.stringify(p.input || {}));
+        // O dado que se lê melhor em tabela (e a ação que espera o "sim") vai
+        // à tela como cartão, montado do resultado e não da fala (lib/cartoes.js).
+        const cartao = cartaoDe(p.name, p.input, saida);
+        if (cartao) { cartoes.push(cartao); emitir({ tipo: 'cartao', cartao }); }
         return {
           type: 'tool_result',
           tool_use_id: p.id,
@@ -612,6 +617,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
       }
     }
 
+    if (cartoes.length) data.cartoes = cartoes;
     if (emStream) { emitir({ tipo: 'fim', ...data }); return res.end(); }
     res.status(r.status).json(data);
   } catch (e) {
@@ -624,6 +630,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
 /* Só o dono, pela sessão do Nexus (lib/sessao.js). `interno` é o handler cru,
    para quem chama por dentro já autenticado por outro caminho (o WhatsApp). */
 const { comSessao } = require('../lib/sessao');
+const { cartaoDe } = require('../lib/cartoes');
 // O que o arquivo já exportava além da rota (ex.: make.hooks, usado pelo
 // chat) continua exportado: trocar module.exports apagava essas funções.
 const exportadosAntes = { ...module.exports };

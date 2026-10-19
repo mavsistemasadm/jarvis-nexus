@@ -14,11 +14,35 @@
 <body>
 <canvas id="scene"></canvas>
 
-<div id="boot"><div class="spark"></div><div class="t">N E X U S</div><div class="s">toque para ativar</div></div>
+<div id="boot"><div class="spark"></div><div class="t">J A R V I S</div><div class="s">toque para ativar</div></div>
 
 <div id="hud-top">
   <div id="status"><span class="dot"></span><span id="statusText">inicializando</span></div>
+  <div class="brand">JARVIS</div>
+  <div class="hud-acoes">
+    <button id="histBtn" class="icone" aria-label="Histórico de hoje" title="Histórico de hoje">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>
+    </button>
+    <a id="linkMemorias" class="icone" href="/memorias.html" aria-label="O que o Jarvis sabe" title="O que o Jarvis sabe">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-6 6c0 2.2 1.2 3.6 2.4 4.7.9.8 1.6 1.7 1.6 2.8V18h4v-1.5c0-1.1.7-2 1.6-2.8C16.8 12.6 18 11.2 18 9a6 6 0 0 0-6-6Z"/><path d="M10 21h4"/></svg>
+    </a>
+    <button id="kbd" class="icone" aria-label="Digitar" title="Digitar">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+    </button>
+    <button id="gear" class="icone" aria-label="Configurações" title="Configurações">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+    </button>
+  </div>
 </div>
+
+<!-- Cartão: tabela de números ou ação esperando o "sim" (lib/cartoes.js). -->
+<section id="cartao" hidden aria-live="polite"></section>
+
+<!-- Histórico de hoje, guardado neste navegador. -->
+<aside id="log" aria-label="Histórico de hoje">
+  <div class="log-topo"><h2>Hoje</h2><button id="logFechar" class="icone" aria-label="Fechar histórico"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div id="logLista"></div>
+</aside>
 
 <div id="caption"></div>
 
@@ -33,9 +57,6 @@
   <button id="send">ENVIAR</button>
 </div>
 
-<button id="kbd" title="Digitar">⌨</button>
-<button id="gear" title="Configurações">⚙</button>
-<a id="linkMemorias" href="/memorias.html" title="O que o Jarvis sabe">🧠</a>
 <div id="panel">
   <h3>Fontes de dados</h3>
   <label><input type="checkbox" data-mcp="windsor" checked> Windsor.ai (marketing/vendas)</label>
@@ -60,7 +81,7 @@
 <!-- A porta do Nexus (lib/sessao.js): sem sessão do dono, nada aqui responde,
      e esta camada leva ao login do Nexus. -->
 <div id="portao" hidden>
-  <div class="t">N E X U S</div>
+  <div class="t">J A R V I S</div>
   <p id="portaoMsg">Entre com a sua conta do Nexxus para usar o Jarvis.</p>
   <a id="portaoBtn" href="https://www.nexuspericial.com.br/abrir/jarvis">Entrar com o Nexxus</a>
 </div>
