@@ -1,0 +1,214 @@
+{
+ "_sobre": "Campanha nova da MH aprovada pelo dono em 19/10/2026 (versão 4 da prévia, posição 1 livre e 'todas as áreas' fixo na 2). Criada PAUSADA por trafego_google_criar_campanha.",
+ "conta": "mh",
+ "nome": "MHC | Advogados | Todas as áreas | Search BR",
+ "orcamentoDia": 45,
+ "cpcMaximo": 4,
+ "urlFinal": "https://mhcalculos.com.br/",
+ "sufixo": "utm_source=google&utm_medium=cpc&utm_campaign=mh-advogados&utm_content={adgroupid}&utm_term={keyword}&mt={matchtype}",
+ "caminho": [
+  "calculos",
+  "advogados"
+ ],
+ "horario": {
+  "dias": [
+   "MONDAY",
+   "TUESDAY",
+   "WEDNESDAY",
+   "THURSDAY",
+   "FRIDAY"
+  ],
+  "inicio": 8,
+  "fim": 20
+ },
+ "grupo": "Advogados · Todas as áreas",
+ "palavras": [
+  "perito calculista",
+  "perito trabalhista",
+  "perito calculista trabalhista",
+  "calculista trabalhista",
+  "calculista judicial",
+  "perito em cálculo trabalhista",
+  "perito em cálculo previdenciário",
+  "perito previdenciário",
+  "perito contábil",
+  "perito contábil judicial",
+  "perito judicial",
+  "perito contador",
+  "contador perito",
+  "perito bancário",
+  "empresa de cálculo judicial",
+  "empresa de cálculos judiciais",
+  "escritório de cálculos judiciais",
+  "cálculos judiciais",
+  "cálculo judicial",
+  "cálculos para advogados",
+  "cálculo trabalhista para advogado",
+  "laudo pericial bancário",
+  "perito revisional bancário",
+  "cálculo revisional bancário"
+ ],
+ "negativas": [
+  "pra mim",
+  "para mim",
+  "meu",
+  "minha",
+  "me aposentar",
+  "se aposentar",
+  "aposentadoria",
+  "quanto tempo falta",
+  "quanto vou receber",
+  "quanto devo pagar",
+  "simular",
+  "simulador",
+  "simulação",
+  "calculadora",
+  "gratis",
+  "grátis",
+  "gratuito",
+  "online",
+  "pje calc",
+  "pjecalc",
+  "programa",
+  "software",
+  "planilha",
+  "download",
+  "curso",
+  "cursos",
+  "concurso",
+  "vaga",
+  "vagas",
+  "emprego",
+  "salário",
+  "quanto ganha",
+  "como ser",
+  "como se tornar",
+  "faculdade",
+  "pós graduação",
+  "apostila",
+  "o que é",
+  "o que faz",
+  "cadastro de perito",
+  "nomeação",
+  "pelo cpf",
+  "meu inss",
+  "rescisão"
+ ],
+ "titulos": [
+  {
+   "texto": "Os Melhores Cálculos Judiciais"
+  },
+  {
+   "texto": "Precisa de Cálculo Judicial?"
+  },
+  {
+   "texto": "Atuamos em Todas as Áreas",
+   "fixo": "HEADLINE_2"
+  },
+  {
+   "texto": "Todas as Áreas do Direito",
+   "fixo": "HEADLINE_2"
+  },
+  {
+   "texto": "Advogue sem Risco e Incertezas"
+  },
+  {
+   "texto": "Escolha de Grandes Bancas"
+  },
+  {
+   "texto": "Segurança para Seus Processos"
+  },
+  {
+   "texto": "Perito Especialista em Cálculo"
+  },
+  {
+   "texto": "Fale Direto com o Perito Agora"
+  },
+  {
+   "texto": "Cálculos Judiciais Periciais"
+  },
+  {
+   "texto": "Especialistas em Cálculos"
+  },
+  {
+   "texto": "Perícia Contábil Judicial"
+  },
+  {
+   "texto": "Empresa de Cálculos Judiciais"
+  },
+  {
+   "texto": "Cálculos para Escritórios"
+  },
+  {
+   "texto": "Revisão de Contratos Bancários"
+  }
+ ],
+ "descricoes": [
+  "Você não precisa de apenas cálculos, mas sim de segurança e tranquilidade para advogar.",
+  "Não corra riscos com os cálculos da sua ação. Somos a escolha das maiores bancas do país.",
+  "Os sistemas de cálculo não vão defender os teus números, nós vamos! Queremos teu sucesso.",
+  "Todas as áreas do direito, para advogados e escritórios. Não atendemos pessoa física."
+ ],
+ "sitelinks": [
+  {
+   "texto": "Cálculos Trabalhistas",
+   "linha1": "Segurança técnica no processo",
+   "linha2": "Cálculo seguro em toda instância",
+   "url": "https://mhcalculos.com.br/pericia-judicial/calculos-trabalhistas"
+  },
+  {
+   "texto": "Cálculos Bancários",
+   "linha1": "Revisão de contratos bancários",
+   "linha2": "Segurança e precisão",
+   "url": "https://mhcalculos.com.br/pericia-judicial/calculos-bancarios"
+  },
+  {
+   "texto": "Cálculos Cíveis",
+   "linha1": "Atuamos em todas as áreas",
+   "linha2": "Segurança jurídica e precisão",
+   "url": "https://mhcalculos.com.br/pericia-judicial/calculos-civeis"
+  },
+  {
+   "texto": "Perícia Contábil",
+   "linha1": "Perícia contábil judicial",
+   "linha2": "Fale direto com o perito",
+   "url": "https://mhcalculos.com.br/pericia-judicial/pericia-contabil"
+  },
+  {
+   "texto": "Área do Advogado",
+   "linha1": "O cálculo tem endereço",
+   "linha2": "Seus processos num só lugar",
+   "url": "https://mhcalculos.com.br/area-do-advogado"
+  },
+  {
+   "texto": "Sobre a MH Cálculos",
+   "linha1": "A escolha de grandes bancas",
+   "linha2": "Conheça a MH e surpreenda-se",
+   "url": "https://mhcalculos.com.br/sobre"
+  }
+ ],
+ "frases": [
+  "Escolha de Grandes Bancas",
+  "Perito Especialista",
+  "Segurança Jurídica",
+  "Cálculo Defensável",
+  "Atuação Técnica",
+  "Todas as Áreas do Direito",
+  "Para Advogados",
+  "Fale com o Perito"
+ ],
+ "snippet": {
+  "cabecalho": "Serviços",
+  "valores": [
+   "Cálculo Trabalhista",
+   "Cálculo Bancário",
+   "Cálculo Cível",
+   "Perícia Contábil",
+   "Liquidação de Sentença",
+   "Revisão de Cálculos"
+  ]
+ },
+ "telefone": "(48) 98813-3402",
+ "nomeEmpresa": "MH Cálculos",
+ "logo": "https://mhcalculos.com.br/marca/logo-mh.png"
+}
