@@ -48,8 +48,9 @@ try { cerebro = require('../lib/cerebro'); } catch (e) { console.warn('[nexus] c
 let escritas = null, panoramas = null;
 try { escritas = require('../lib/escritas'); } catch (e) { console.warn('[nexus] escritas não disponível:', e.message); }
 try { panoramas = require('../lib/panoramas'); } catch (e) { console.warn('[nexus] panoramas não disponível:', e.message); }
-let trafego = null, emails = null;
+let trafego = null, emails = null, googleAds = null;
 try { trafego = require('../lib/trafego'); } catch (e) { console.warn('[nexus] tráfego não disponível:', e.message); }
+try { googleAds = require('../lib/google-ads'); } catch (e) { console.warn('[nexus] google ads não disponível:', e.message); }
 try { emails = require('../lib/emails'); } catch (e) { console.warn('[nexus] emails não disponível:', e.message); }
 let academyApp = null, tarefas = null;
 try { academyApp = require('../lib/academy-app'); } catch (e) { console.warn('[nexus] academy-app não disponível:', e.message); }
@@ -375,6 +376,7 @@ Você tem ferramentas que leem os sistemas reais do Grupo MH:
 - Peritos Academy: academy_panorama (alunos ativos e parados, aprendizado, dúvidas e desafios esperando o Marlos, próximas lives), academy_cursos, academy_eventos.
 - Live de tira-dúvidas: ao criar com academy_criar_live, se ele disser que a live é para responder dúvidas, use tiraDuvidas=true (a página recebe a dúvida antes, com anexo de até 20 MB, e convite e lembretes chamam para mandar). "Quantas dúvidas chegaram?": academy_duvidas_da_live; ele responde e dá baixa na página que a ferramenta devolve.
 - Tráfego pago: trafego_meta (campanhas do Meta pelo pixel; nivel="conjunto" mostra cada conjunto, que no teste ABO de criativos é cada criativo, e nivel="anuncio" cada anúncio). O pixel subconta venda: compare com nexus_panorama antes de dizer que um anúncio não vende. Ele pode pausar, ativar e mudar orçamento diário de campanha ou de conjunto (trafego_pausar, trafego_ativar, trafego_orcamento; conjuntoId para conjunto, que é onde mora o orçamento no ABO), sempre com confirmação. Antes de sugerir pausar, olhe o período certo: campanha nova precisa de dias para aprender.
+- Google Ads: trafego_google (contas Nexus Pericial e MH Cálculos; nivel campanha, grupo, anuncio, palavra ou termo de pesquisa). As conversões do Google ainda não são confiáveis: julgue por gasto, cliques, CTR e CPC, e venda real é nexus_panorama. "termo" mostra o que as pessoas digitaram, e é onde aparece palavra negativa a sugerir. Pode pausar, ativar (campanha ou grupo) e mudar orçamento diário de campanha (trafego_google_pausar, trafego_google_ativar, trafego_google_orcamento), sempre com confirmação. Se pedir "o tráfego" sem dizer onde, olhe Meta e Google.
 - Opera: opera_panorama (cobranças a receber e vencidas, comercial, conversas esperando ele, prazos de processo, honorários, terceirização), além das consultas antigas de agenda e pipeline.
 - Financeiro (grupo-mh-financeiro), como antes.
 O que ele pode mandar fazer, sempre com confirmação: lançamentos e conferência no Financeiro, agenda e processo no Opera, email pelo compositor do Nexus (escrever rascunho e mandar teste não precisam de confirmação; disparar precisa, e o resumo mostra quantas pessoas recebem), matrícula e anúncio de live na Academy, e tarefa de código para o Claude Code quando existir a ferramenta.
@@ -423,6 +425,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
     if (cerebro && cerebro.disponivel()) extras.push(...cerebro.FERRAMENTAS);
     if (panoramas && panoramas.disponivel()) extras.push(...panoramas.FERRAMENTAS);
     if (trafego && trafego.disponivel()) extras.push(...trafego.FERRAMENTAS);
+    if (googleAds && googleAds.disponivel()) extras.push(...googleAds.FERRAMENTAS);
     if (acoes && acoes.disponivel()) {
       extras.push(...acoes.FERRAMENTAS);
       if (escritas) extras.push(...escritas.FERRAMENTAS);
