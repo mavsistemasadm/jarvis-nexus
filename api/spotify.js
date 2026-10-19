@@ -88,12 +88,25 @@ async function tocar(busca) {
     return { erro: `não achei "${busca}" no Spotify` };
   }
 
-  const r = await fetch(`${SP_API}/v1/me/player/play`, {
+  // ⚠️ APARELHO ABERTO MAS PARADO NÃO É "ATIVO" para o Spotify, e o play sem
+  // device_id devolve 404. Com o Spotify aberto em algum lugar, toca nele.
+  let r = await fetch(`${SP_API}/v1/me/player/play`, {
     method: 'PUT',
     headers: { 'authorization': `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (r.status === 404) return { erro: 'nenhum aparelho ativo — abre o Spotify no PC ou celular primeiro' };
+  if (r.status === 404) {
+    const d = await spFetch(token, '/me/player/devices');
+    const aparelho = (d.devices || [])[0];
+    if (aparelho) {
+      r = await fetch(`${SP_API}/v1/me/player/play?device_id=${encodeURIComponent(aparelho.id)}`, {
+        method: 'PUT',
+        headers: { 'authorization': `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+  }
+  if (r.status === 404) return { erro: 'nenhum aparelho com o Spotify aberto: abra o Spotify no computador ou no celular' };
   if (r.status === 403) return { erro: 'controle de reprodução exige Spotify Premium' };
   if (!r.ok) return { erro: 'Spotify respondeu ' + r.status };
   return { ok: true, tocando };
