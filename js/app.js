@@ -717,7 +717,9 @@ function resetCapTimer(){
 }
 function beginThink(q){
   clearTimeout(capTimer);clearTimeout(sendTimer);capturing=false;capBuffer='';
-  suppress=true;try{rec.stop();}catch(e){}
+  /* O microfone NÃO desliga mais (19/10/2026): enquanto pensa e fala, ele
+     só escuta o nome do Jarvis, para poder ser interrompido. */
+  suppress=true;
   ask(q);
 }
 window.resumeWake=function(){
@@ -732,7 +734,8 @@ window.resumeWake=function(){
 
 /* Vigia: garante que o mic está sempre ativo quando deveria */
 setInterval(()=>{
-  if(!rec||!wakeActive||suppress)return;
+  if(!rec||!wakeActive)return;
+  if(suppress&&!(speakingFlag||thinkingFlag))return;
   try{rec.start();}catch(e){}
 },2000);
 if(rec){
@@ -744,6 +747,21 @@ if(rec){
       if(e.results[i].isFinal)latestFinal+=tr;else interim+=tr;
     }
     const heard=(latestFinal||interim).toLowerCase();
+    /* ===== INTERROMPER PELA VOZ (19/10/2026) =====
+       Enquanto ele pensa ou fala, o microfone fica aberto, mas SÓ o nome
+       dele conta: qualquer outra palavra pode ser a própria voz voltando pelo
+       alto-falante. "Jarvis" para a fala na hora; "Jarvis, e o financeiro?"
+       para e já pergunta. */
+    if(suppress){
+      if(!(speakingFlag||thinkingFlag))return;
+      const w=wakeWord();
+      const nomes=[w,'jarvis','jarves','gervis','jervis','jarbas'];
+      const achado=nomes.find(f=>heard.indexOf(f)>=0);
+      if(!achado)return;
+      const depois=heard.slice(heard.indexOf(achado)+achado.length).replace(/^[,.!?\s]+/,'').trim();
+      window.interromperJarvis(depois);
+      return;
+    }
     if(!capturing){
       const w=wakeWord();
       const fuzzy=['jarvis','jarves','jovens','gervis','jervis','jarbas'];
@@ -787,7 +805,7 @@ if(rec){
       }
     }
   };
-  rec.onend=()=>{if(wakeActive&&!suppress)setTimeout(tryStart,300);};
+  rec.onend=()=>{if(wakeActive&&(!suppress||speakingFlag||thinkingFlag))setTimeout(()=>{try{rec.start();}catch(e){}},300);};
   rec.onerror=ev=>{
     if(ev.error==='not-allowed'){
       wakeActive=false;micBtn.classList.remove('live');
@@ -796,6 +814,32 @@ if(rec){
     }
   };
 }
+/* Para a fala e volta a ouvir. Usada pela voz ("Jarvis"), por um toque na
+   tela e pela tecla Espaço. A resposta interrompida continua escrita no
+   histórico; só a voz para. */
+window.interromperJarvis=function(depois){
+  if(!(speakingFlag||thinkingFlag))return;
+  window.__interrompidoEm=Date.now();
+  stopAudio();
+  clearTimeout(sendTimer);clearTimeout(capTimer);
+  suppress=false;capturing=true;capBuffer='';
+  setState('listening');
+  if(depois&&depois.length>3){
+    capBuffer=depois;showCaption(capBuffer,'user');
+    sendTimer=setTimeout(()=>{if(capturing&&capBuffer.trim().length>1)beginThink(capBuffer.trim());},1400);
+  }else{
+    showCaption('Pode falar…');
+  }
+  resetCapTimer();
+  try{if(rec&&wakeActive)rec.start();}catch(e){}
+};
+document.getElementById('scene').addEventListener('pointerdown',()=>window.interromperJarvis(''));
+document.addEventListener('keydown',e=>{
+  if(e.code!=='Space')return;
+  const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
+  if(!(speakingFlag||thinkingFlag))return;
+  e.preventDefault();window.interromperJarvis('');
+});
 micBtn.onclick=()=>{
   audioInit();
   if(!rec)return;
@@ -955,7 +999,7 @@ function criarFala(onDone){
     const item=fila.shift();
     if(!item){if(acabou)concluir();return;}
     tocando=true;
-    if(!comecou){comecou=true;suppress=true;try{if(rec)rec.stop();}catch(e){}setState('speaking');}
+    if(!comecou){comecou=true;suppress=true;setState('speaking');}
     const blob=item.audio?await item.audio:null;
     if(cancelado)return;
     await new Promise(res=>{
@@ -992,7 +1036,7 @@ function criarFala(onDone){
 }
 
 async function speak(text,onDone){
-  suppress=true;try{if(rec)rec.stop();}catch(e){}
+  suppress=true;
   if(!document.getElementById('ttsOn').checked){setState('idle');onDone&&onDone();return;}
   stopAudio();
   const clean=text.replace(/[*#_\`>]/g,'').replace(/\s+/g,' ').trim();
@@ -1116,6 +1160,10 @@ async function ask(text){
   showCaption(text,'user');addLog('user',text);
   fecharCartao();
   const cartoesDaResposta=[];
+  /* Interrompida pela voz ou por toque depois daqui: a resposta desta
+     pergunta vai só para o histórico, sem voz e sem tomar a legenda. */
+  const perguntadaEm=Date.now();
+  const foiInterrompida=()=>(window.__interrompidoEm||0)>perguntadaEm;
   setState('thinking');
   history.push({role:'user',content:text});
   if(history.length>16)history=history.slice(-16);
@@ -1166,7 +1214,7 @@ async function ask(text){
           else if(ev.tipo==='texto'){
             if(ultimaVolta!==null&&ev.volta!==ultimaVolta)fala.separador();
             ultimaVolta=ev.volta;fala.empurrar(ev.delta);
-            const v=fala.visivel();if(v)showCaption(v);
+            const v=fala.visivel();if(v&&!foiInterrompida())showCaption(v);
           }
           else if(ev.tipo==='fim')data=ev;
         }
@@ -1183,6 +1231,7 @@ async function ask(text){
     history.push({role:'assistant',content:answer});
     // Resposta comum (sem fluxo) traz os cartões no fim.
     if(!cartoesDaResposta.length&&Array.isArray(data.cartoes)){cartoesDaResposta.push(...data.cartoes);mostrarCartoes(cartoesDaResposta,true);}
+    if(foiInterrompida()){addLog('assistant',answer,cartoesDaResposta);if(fala)fala.cancelar();return;}
     showCaption(answer);addLog('assistant',answer,cartoesDaResposta);
     // Já falou em fluxo: só termina a fila. Resposta trocada no servidor
     // (erro do Spotify, recusa) ou que não veio em pedaços: fala inteira.
