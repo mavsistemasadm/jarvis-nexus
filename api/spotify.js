@@ -3,18 +3,44 @@
 const SP_ACCOUNTS = process.env.SPOTIFY_ACCOUNTS_URL || 'https://accounts.spotify.com';
 const SP_API = process.env.SPOTIFY_API_URL || 'https://api.spotify.com';
 
+/* A autorização da conta mora em `integracoes` (chave spotify), como a do
+   Google Ads (19/10/2026): o dono entra uma vez em /api/spotify/login, e o
+   refresh token é guardado aqui, nunca mostrado na tela nem copiado para env.
+   SPOTIFY_REFRESH_TOKEN no env continua valendo, se existir. */
+const db = require('../lib/supabase');
+const CHAVE = 'spotify';
+const RETORNO = 'https://jarvis.nexuspericial.com.br/api/spotify/callback';
+
+async function lerIntegracao() {
+  try { const [l] = await db.query('integracoes', `chave=eq.${CHAVE}&limit=1`); return l && l.valor ? l.valor : null; } catch { return null; }
+}
+
+async function gravarIntegracao(valor) {
+  const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/integracoes?on_conflict=chave`, {
+    method: 'POST',
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_KEY, authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+      'content-type': 'application/json', prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({ chave: CHAVE, valor, atualizada_em: new Date().toISOString() }),
+  });
+  if (!r.ok) throw new Error(`não gravei a autorização do Spotify (${r.status})`);
+}
+
 function creds() {
   return {
     id: process.env.SPOTIFY_CLIENT_ID,
     secret: process.env.SPOTIFY_CLIENT_SECRET,
-    redirect: process.env.SPOTIFY_REDIRECT_URI || 'http://localhost:3000/api/spotify/callback',
+    redirect: process.env.SPOTIFY_REDIRECT_URI || RETORNO,
     refresh: process.env.SPOTIFY_REFRESH_TOKEN
   };
 }
 
 async function accessToken() {
   const c = creds();
-  if (!c.id || !c.secret || !c.refresh) throw new Error('Spotify não configurado (.env: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN)');
+  if (!c.refresh) c.refresh = (await lerIntegracao())?.refresh_token;
+  if (!c.id || !c.secret) throw new Error('Spotify sem SPOTIFY_CLIENT_ID/SECRET na Vercel');
+  if (!c.refresh) throw new Error('Spotify ainda não conectado: abra jarvis.nexuspericial.com.br/api/spotify/login uma vez');
   const r = await fetch(`${SP_ACCOUNTS}/api/token`, {
     method: 'POST',
     headers: {
@@ -25,6 +51,8 @@ async function accessToken() {
   });
   const d = await r.json();
   if (!d.access_token) throw new Error('token do Spotify falhou: ' + JSON.stringify(d).slice(0, 120));
+  // O Spotify às vezes troca o refresh token: o novo passa a valer.
+  if (d.refresh_token && !process.env.SPOTIFY_REFRESH_TOKEN) await gravarIntegracao({ refresh_token: d.refresh_token }).catch(() => {});
   return d.access_token;
 }
 
@@ -109,12 +137,23 @@ async function atender(req, res) {
     });
     const d = await r.json();
     res.setHeader('content-type', 'text/html; charset=utf-8');
-    if (!d.refresh_token) return res.status(500).end('<h2>Falhou: ' + JSON.stringify(d) + '</h2>');
+    if (!d.refresh_token) return res.status(500).end('<h2>O Spotify não autorizou: ' + String(d.error_description || d.error || 'sem motivo') + '</h2>');
+    await gravarIntegracao({ refresh_token: d.refresh_token, conectado_em: new Date().toISOString() });
     return res.status(200).end(`<body style="font-family:sans-serif;background:#0a0f1e;color:#dbe7ff;padding:40px">
-      <h2>✅ Spotify conectado!</h2>
-      <p>Copie a linha abaixo para o seu <b>.env</b> (e para as variáveis da Vercel):</p>
-      <pre style="background:#071226;padding:16px;border-radius:8px;user-select:all">SPOTIFY_REFRESH_TOKEN=${d.refresh_token}</pre>
-      <p>Depois reinicie o servidor. Pode fechar esta aba.</p></body>`);
+      <h2>✅ Spotify conectado ao Jarvis</h2>
+      <p>Pode fechar esta aba e pedir uma música para ele. Deixe o Spotify aberto em algum aparelho.</p></body>`);
+  }
+
+  /* GET /api/spotify/status → conectado? qual aparelho está ativo? */
+  if (req.method === 'GET' && url.includes('/status')) {
+    try {
+      const token = await accessToken();
+      const d = await spFetch(token, '/me/player/devices');
+      const ativo = (d.devices || []).find((x) => x.is_active) || null;
+      return res.status(200).json({ conectado: true, aparelhos: (d.devices || []).map((x) => x.name), ativo: ativo && ativo.name });
+    } catch (e) {
+      return res.status(200).json({ conectado: false, motivo: String(e.message || e) });
+    }
   }
 
   /* POST /api/spotify → ações por voz */

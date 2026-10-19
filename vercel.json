@@ -36,6 +36,10 @@
   ],
   "routes": [
     {
+      "src": "/api/spotify/(.*)",
+      "dest": "/api/spotify.js"
+    },
+    {
       "src": "/api/([^/.]+)",
       "dest": "/api/$1.js"
     },
