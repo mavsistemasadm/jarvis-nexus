@@ -566,6 +566,7 @@ async function ask(text){
       .filter(b=>b.type==='text')
       .map(b=>b.text).join('\n').trim()||'Não consegui gerar uma resposta agora.';
     window.__music=!!data.musica;
+    if(data.painel&&window.definirPeriodo)window.definirPeriodo(data.painel);
     history.push({role:'assistant',content:answer});
     // Resposta comum (sem fluxo) traz os cartões no fim.
     if(!cartoesDaResposta.length&&Array.isArray(data.cartoes)){cartoesDaResposta.push(...data.cartoes);mostrarCartoes(cartoesDaResposta,true);}

@@ -84,8 +84,15 @@
     </section>
   </div>
   <div class="coluna dir">
+    <div id="periodo" class="painel seletor" role="group" aria-label="Período de financeiro e tráfego" style="--atraso:.08s">
+      <button type="button" data-p="hoje">Hoje</button>
+      <button type="button" data-p="7d">7 dias</button>
+      <button type="button" data-p="mes" aria-pressed="true">Mês</button>
+      <button type="button" data-p="mes_anterior">Mês anterior</button>
+      <span class="custom" hidden></span>
+    </div>
     <section class="painel" id="pFinanceiro" style="--atraso:.16s">
-      <header><h2>Financeiro</h2><span class="idx">04</span></header>
+      <header><h2>Financeiro · <span class="per">mês</span></h2><span class="idx">04</span></header>
       <div class="corpo"><p class="carregando">carregando…</p></div>
     </section>
     <section class="painel" id="pContas" style="--atraso:.28s">
@@ -93,7 +100,7 @@
       <div class="corpo"><p class="carregando">carregando…</p></div>
     </section>
     <section class="painel" id="pTrafego" style="--atraso:.4s">
-      <header><h2>Tráfego · hoje</h2><span class="idx">06</span></header>
+      <header><h2>Tráfego · <span class="per">mês</span></h2><span class="idx">06</span></header>
       <div class="corpo"><p class="carregando">carregando…</p></div>
     </section>
   </div>

@@ -1,8 +1,10 @@
 /* NEXUS → painel: o que fica em volta do núcleo na tela (20/10/2026).
 
    O HUD mostra o dia sem precisar perguntar: tarefas, agenda, atendimento,
-   alertas, o financeiro (hoje, 14 dias, meta do mês), as contas (atrasadas e
-   a vencer) e o tráfego (Meta, Google e as vendas reais do Nexus). A tela
+   alertas, o financeiro (recebido, pago e saldo do período, igual ao
+   dashboard do Financeiro), as contas (vencidas e a vencer) e o tráfego
+   (Meta, Google e as vendas reais do Nexus). Financeiro e tráfego abrem no
+   mês corrente; ?de=&ate= troca o período (seletor da tela ou pela voz). A tela
    pede isto ao abrir, a cada 2 minutos e depois de cada resposta.
 
    ⚠️ CADA PAINEL É ISOLADO. Fonte que falhou volta `{ erro }` e o painel diz
@@ -25,6 +27,7 @@ const trafegoMeta = opcional(() => require('../lib/trafego'));
 const googleAds = opcional(() => require('../lib/google-ads'));
 const vigia = opcional(() => require('../lib/vigia'));
 const panoramas = opcional(() => require('../lib/panoramas'));
+const financeiroApp = opcional(() => require('../lib/financeiro-app'));
 
 const ymdSP = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
 const r0 = (v) => Math.round(Number(v) || 0);
@@ -78,69 +81,64 @@ async function atendimento() {
   };
 }
 
-async function financeiro() {
+/* ⚠️ O FINANCEIRO VEM DO PRÓPRIO FINANCEIRO (ação `caixa` do /api/jarvis
+   dele): a mesma conta do dashboard, para o número da tela do Jarvis ser o
+   que o Marlos encontra lá. Uma conta paralela aqui (pela data do
+   lançamento) já mostrou R$ 324 mil de saída num mês de R$ 42 mil pagos. */
+async function caixa(periodo) {
+  if (!financeiroApp || !financeiroApp.configurado()) return { erro: 'Financeiro sem FINANCEIRO_APP_URL/JARVIS_FINANCEIRO_KEY' };
+  const d = await financeiroApp.chamar('caixa', { de: periodo.de, ate: periodo.ate });
+  if (d.erro) throw new Error(d.erro);
+  return d;
+}
+
+async function financeiro(periodo, cx) {
+  if (cx.erro) return cx;
   const hoje = ymdSP(new Date());
-  const ini = ymdSP(new Date(Date.now() - 13 * 86400000));
-  const [dias, mes] = await Promise.all([
-    negocios.financeiro.porDia(ini, hoje),
-    tentar(() => negocios.financeiro.resumo()),
-  ]);
+  // a série vai do início ao fim do período (ou até hoje), um ponto por dia
+  const fim = periodo.ate < hoje ? periodo.ate : hoje;
+  const porDia = Object.fromEntries((cx.por_dia || []).map((d) => [d.data, d]));
   const serie = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = ymdSP(new Date(Date.now() - i * 86400000));
-    serie.push({ data: d, receitas: r0((dias[d] || {}).receitas) });
+  for (let t = new Date(periodo.de + 'T12:00:00'); ymdSP(t) <= fim && serie.length < 92; t = new Date(t.getTime() + 86400000)) {
+    const d = ymdSP(t);
+    serie.push({ data: d, receitas: r0((porDia[d] || {}).receitas) });
   }
-  const hojeTot = dias[hoje] || { receitas: 0, despesas: 0 };
-  const media = serie.slice(0, 13).reduce((s, x) => s + x.receitas, 0) / 13;
-  const metas = !mes.erro && Array.isArray(mes.meta)
-    ? mes.meta.filter((m) => Number(m.meta) > 0).map((m) => ({ empresa: m.empresa, faturado: r0(m.faturado), meta: r0(m.meta), pct: r0(m.percentual) }))
-    : [];
-  const empresas = !mes.erro && Array.isArray(mes.por_empresa)
-    ? mes.por_empresa.filter((e) => Number(e.receitas) > 0).sort((a, b) => b.receitas - a.receitas).slice(0, 3)
-      .map((e) => ({ empresa: e.empresa, receitas: r0(e.receitas) }))
-    : [];
+  const hojeCx = porDia[hoje] || { receitas: 0, despesas: 0 };
   return {
-    hoje: { receitas: r0(hojeTot.receitas), despesas: r0(hojeTot.despesas) },
-    vs_media: media > 0 ? r0(((hojeTot.receitas - media) / media) * 100) : null,
-    serie, metas, empresas,
-    mes: !mes.erro && Array.isArray(mes.por_empresa) ? {
-      receitas: r0(mes.por_empresa.reduce((s, e) => s + Number(e.receitas || 0), 0)),
-      despesas: r0(mes.por_empresa.reduce((s, e) => s + Number(e.despesas || 0), 0)),
-    } : null,
+    periodo: cx.periodo,
+    tudo: cx.tudo, empresas: cx.empresas || null, pessoal: cx.pessoal || null,
+    hoje: { receitas: r0(hojeCx.receitas), despesas: r0(hojeCx.despesas) },
+    serie,
+    por_empresa: (cx.por_empresa || []).filter((e) => e.receitas > 0).slice(0, 3),
   };
 }
 
-async function contas() {
+function contas(cx) {
+  if (cx.erro) return cx;
+  const c = cx.contas || {};
   const hoje = ymdSP(new Date());
-  const [atraso, avencer] = await Promise.all([
-    negocios.executar('financeiro_contas', { tipo: 'em_atraso' }),
-    negocios.executar('financeiro_contas', { tipo: 'a_vencer', dias: 7 }),
-  ]);
-  if (atraso.erro && avencer.erro) return { erro: atraso.erro };
-  // dias_atraso do banco vem 0 mesmo vencida: a conta é feita aqui
-  const diasDe = (v) => Math.round((new Date(hoje + 'T12:00:00') - new Date(String(v).slice(0, 10) + 'T12:00:00')) / 86400000);
-  const lista = (l) => (Array.isArray(l) ? l : []).map((c) => ({ descricao: limpar(c.descricao), empresa: c.empresa, valor: r2(c.valor), vencimento: c.vencimento, dias_atraso: Math.max(0, diasDe(c.vencimento)) }));
-  const atrasadas = lista(atraso.em_atraso).sort((a, b) => b.valor - a.valor);
-  const proximas = lista(avencer.contas).sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
-  const deHoje = proximas.filter((c) => String(c.vencimento).slice(0, 10) === hoje);
-  const soma = (l) => r2(l.reduce((s, c) => s + c.valor, 0));
+  const diasDe = (v) => Math.max(0, Math.round((new Date(hoje + 'T12:00:00') - new Date(String(v).slice(0, 10) + 'T12:00:00')) / 86400000));
+  const itens = (b) => ((b && b.itens) || []).map((x) => ({ descricao: limpar(x.descricao), empresa: x.empresa, valor: r2(x.valor), vencimento: x.vencimento, dias_atraso: diasDe(x.vencimento) }));
   return {
-    atraso: atraso.erro ? { erro: atraso.erro } : { qtd: atrasadas.length, total: soma(atrasadas), itens: atrasadas.slice(0, 3) },
-    hoje: { qtd: deHoje.length, total: soma(deHoje), itens: deHoje.slice(0, 3) },
-    semana: avencer.erro ? { erro: avencer.erro } : { qtd: proximas.length, total: soma(proximas), itens: proximas.filter((c) => !deHoje.includes(c)).slice(0, 2) },
+    atraso: { qtd: (c.vencidas || {}).qtd || 0, total: (c.vencidas || {}).total || 0, itens: itens(c.vencidas).slice(0, 3) },
+    hoje: { qtd: (c.vencem_hoje || {}).qtd || 0, total: (c.vencem_hoje || {}).total || 0, itens: itens(c.vencem_hoje).slice(0, 3) },
+    semana: { qtd: (c.a_vencer_7d || {}).qtd || 0, total: (c.a_vencer_7d || {}).total || 0 },
+    a_pagar_7d: c.a_pagar_7d || 0, a_receber_7d: c.a_receber_7d || 0,
   };
 }
 
-async function trafego() {
+async function trafego(periodo) {
   const hoje = ymdSP(new Date());
+  const ate = periodo.ate < hoje ? periodo.ate : hoje;
   const metaFn = trafegoMeta && trafegoMeta.disponivel() && ferramenta(trafegoMeta.FERRAMENTAS, 'trafego_meta');
   const nexusFn = panoramas && ferramenta(panoramas.FERRAMENTAS, 'nexus_panorama');
+  // o panorama do Nexus conta dias até hoje: período que termina antes de hoje não cabe nele
+  const diasNexus = ate === hoje ? Math.round((new Date(hoje + 'T12:00:00') - new Date(periodo.de + 'T12:00:00')) / 86400000) + 1 : null;
   const [meta, google, nexus] = await Promise.all([
-    metaFn ? tentar(() => metaFn({ de: hoje, ate: hoje })) : { erro: 'Meta sem JARVIS_NEXUS_KEY' },
-    googleAds && googleAds.disponivel() ? tentar(() => googleAds.desempenho({ nivel: 'campanha', de: hoje, ate: hoje })) : { erro: 'Google Ads não conectado' },
-    nexusFn ? tentar(() => nexusFn({ dias: 1 })) : { erro: 'Nexus não configurado' },
+    metaFn ? tentar(() => metaFn({ de: periodo.de, ate })) : { erro: 'Meta sem JARVIS_NEXUS_KEY' },
+    googleAds && googleAds.disponivel() ? tentar(() => googleAds.desempenho({ nivel: 'campanha', de: periodo.de, ate })) : { erro: 'Google Ads não conectado' },
+    !nexusFn ? { erro: 'Nexus não configurado' } : diasNexus ? tentar(() => nexusFn({ dias: diasNexus })) : { erro: 'vendas do Nexus só para períodos até hoje' },
   ]);
-
   let m = { erro: meta.erro };
   if (!meta.erro) {
     const camps = meta.campanhas || [];
@@ -191,10 +189,27 @@ async function atender(req, res) {
     return res.end(JSON.stringify(await tentar(() => atual({ id, acao }))));
   }
 
-  const fontes = { tarefas, agenda, atendimento, financeiro, contas, trafego, alertas };
+  // o período de financeiro e tráfego: o mês corrente, ou o que a tela pedir
+  const q = new URLSearchParams(String(req.url || '').split('?')[1] || '');
+  const valida = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''));
+  const hoje = ymdSP(new Date());
+  const fimMes = new Date(Date.UTC(Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const periodo = {
+    de: valida(q.get('de')) ? q.get('de') : hoje.slice(0, 8) + '01',
+    ate: valida(q.get('ate')) ? q.get('ate') : fimMes,
+  };
+  if (periodo.ate < periodo.de) periodo.ate = periodo.de;
+
+  const cx = await tentar(() => caixa(periodo));
+  const fontes = {
+    tarefas, agenda, atendimento, alertas,
+    financeiro: () => financeiro(periodo, cx),
+    contas: () => contas(cx),
+    trafego: () => trafego(periodo),
+  };
   const nomes = Object.keys(fontes);
   const resultados = await Promise.all(nomes.map((n) => tentar(fontes[n])));
-  const corpo = { agora: new Date().toISOString() };
+  const corpo = { agora: new Date().toISOString(), periodo };
   nomes.forEach((n, i) => { corpo[n] = resultados[i]; });
   res.end(JSON.stringify(corpo));
 }

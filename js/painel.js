@@ -53,7 +53,8 @@
     };
     requestAnimationFrame(passo);
   }
-  const contarTodos = (raiz) => raiz.querySelectorAll('[data-conta]').forEach((el) => contar(el, Number(el.dataset.conta), el.dataset.fmt === 'n' ? (v) => num(v) : reais));
+  const reaisSinal = (v) => (v < 0 ? '−' : '') + reais(Math.abs(v));
+  const contarTodos = (raiz) => raiz.querySelectorAll('[data-conta]').forEach((el) => contar(el, Number(el.dataset.conta), el.dataset.fmt === 'n' ? (v) => num(v) : reaisSinal));
 
   const falhou = (d) => !d || d.erro;
   const semDado = (d) => `<p class="falha">Não consegui verificar agora.${d && d.erro ? `<span class="motivo">${esc(d.erro)}</span>` : ''}</p>`;
@@ -101,7 +102,8 @@
   /* ---- 04 financeiro ---- */
   function grafico(serie) {
     const max = Math.max(1, ...serie.map((p) => p.receitas));
-    const W = 300, H = 64, passo = W / (serie.length - 1);
+    const W = 300, H = 64, passo = W / Math.max(1, serie.length - 1);
+    if (!serie.length) return '';
     const pts = serie.map((p, i) => [i * passo, H - 6 - (p.receitas / max) * (H - 14)]);
     const linha = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
     const ult = pts[pts.length - 1];
@@ -111,16 +113,19 @@
       <path d="${linha}L${W} ${H}L0 ${H}Z" class="area"/>
       <path d="${linha}" class="linha" pathLength="100"/>
       <circle cx="${ult[0]}" cy="${ult[1]}" r="3.5" class="ponto-final"/>
-    </svg><div class="eixo"><span>14 dias</span><span>hoje</span></div>`;
+    </svg><div class="eixo"><span>${esc(serie.length ? serie[0].data.slice(8, 10) + '/' + serie[0].data.slice(5, 7) : '')}</span><span>${esc(serie.length ? serie[serie.length - 1].data.slice(8, 10) + '/' + serie[serie.length - 1].data.slice(5, 7) : '')}</span></div>`;
   }
   function financeiro(d) {
     const el = corpo('pFinanceiro');
     if (falhou(d)) return (el.innerHTML = semDado(d));
-    const delta = d.vs_media == null ? '' : `<span class="delta ${d.vs_media >= 0 ? 'pos' : 'neg'}">${d.vs_media >= 0 ? '+' : ''}${d.vs_media}% <small>vs média</small></span>`;
-    el.innerHTML = `<div class="destaque"><div><span class="rot">ENTROU HOJE</span><span class="num grande" data-conta="${d.hoje.receitas}">R$ 0</span></div>${delta}</div>`
+    const t = d.tudo;
+    const escopo = (rot, x) => x ? `<div class="escopo"><span class="rot">${rot}</span><span class="mono">${reais(x.receitas)} <small>−</small> ${reais(x.despesas)}</span><span class="mono ${x.saldo < 0 ? 'neg' : 'pos'}">${x.saldo < 0 ? '−' : ''}${reais(Math.abs(x.saldo))}</span></div>` : '';
+    el.innerHTML = `<div class="destaque"><div><span class="rot">SALDO DO PERÍODO</span><span class="num grande ${t.saldo < 0 ? 'neg' : ''}" data-conta="${t.saldo}">R$ 0</span></div><span class="delta"><small>hoje</small> ${reais(d.hoje.receitas)}</span></div>`
       + grafico(d.serie)
-      + (d.mes ? `<div class="trio">${tile('MÊS · ENTROU', `<span data-conta="${d.mes.receitas}">R$ 0</span>`)}${tile('MÊS · SAIU', `<span data-conta="${d.mes.despesas}">R$ 0</span>`)}${tile('SALDO', reais(d.mes.receitas - d.mes.despesas), '', d.mes.receitas - d.mes.despesas < 0 ? 'ambar' : '')}</div>` : '')
-      + (d.metas.length ? '<div class="metas"><span class="rot">META DO MÊS</span>' + d.metas.map((m) => `<div class="meta"><div class="meta-top"><span>${esc(curtoEmpresa(m.empresa))}</span><span class="mono">${reais(m.faturado)} <small>/ ${reais(m.meta)}</small> · ${m.pct}%</span></div><div class="trilho"><span style="--pct:${Math.min(100, m.pct)}%"></span></div></div>`).join('') + '</div>' : '');
+      + `<div class="trio">${tile('RECEBIDO', `<span data-conta="${t.receitas}">R$ 0</span>`, '', 'pos')}${tile('PAGO', `<span data-conta="${t.despesas}">R$ 0</span>`)}${tile('SALDO', `${t.saldo < 0 ? '−' : ''}${reais(Math.abs(t.saldo))}`, '', t.saldo < 0 ? 'ambar' : 'pos')}</div>`
+      + (d.empresas || d.pessoal ? `<div class="escopos">${escopo('EMPRESAS', d.empresas)}${escopo('PESSOAL', d.pessoal)}</div>` : '')
+      + (d.por_empresa.length ? '<div class="metas"><span class="rot">RECEBIDO POR EMPRESA</span>' + d.por_empresa.map((e) => `<div class="meta-top"><span>${esc(curtoEmpresa(e.empresa))}</span><span class="mono">${reais(e.receitas)}</span></div>`).join('') + '</div>' : '')
+      + '<p class="nota">Mesma conta do dashboard do Financeiro: só o que está pago, pela data de pagamento.</p>';
     contarTodos(el);
   }
 
@@ -133,8 +138,9 @@
     const linha = (c, tag) => `<div class="conta"><span class="txt">${esc(c.descricao)}<small>${esc(curtoEmpresa(c.empresa))}</small></span><span class="mono">${reais(c.valor)}</span>${tag}</div>`;
     let lista = '';
     if (d.hoje.qtd) lista += '<span class="rot sub">VENCEM HOJE</span>' + d.hoje.itens.map((c) => linha(c, '')).join('') + (d.hoje.qtd > d.hoje.itens.length ? `<p class="mais">e mais ${d.hoje.qtd - d.hoje.itens.length}</p>` : '');
-    if (!falhou(d.atraso) && d.atraso.qtd) lista += '<span class="rot sub ambar">MAIORES EM ATRASO</span>' + d.atraso.itens.map((c) => linha(c, `<span class="tag ambar">${c.dias_atraso}d</span>`)).join('');
-    el.innerHTML = `<div class="trio">${bloco('EM ATRASO', d.atraso, 'ambar')}${bloco('VENCEM HOJE', d.hoje, 'ativo')}${bloco('PRÓX. 7 DIAS', d.semana, '')}</div>` + lista;
+    if (!falhou(d.atraso) && d.atraso.qtd) lista += '<span class="rot sub ambar">MAIORES VENCIDAS</span>' + d.atraso.itens.map((c) => linha(c, `<span class="tag ambar">${c.dias_atraso}d</span>`)).join('');
+    el.innerHTML = `<div class="trio">${bloco('VENCIDAS', d.atraso, 'ambar')}${bloco('VENCEM HOJE', d.hoje, 'ativo')}${bloco('A VENCER 7 DIAS', d.semana, '')}</div>`
+      + `<div class="duplo">${tile('A PAGAR · 7 DIAS', reais(d.a_pagar_7d))}${tile('A RECEBER · 7 DIAS', reais(d.a_receber_7d), '', 'pos')}</div>` + lista;
     contarTodos(el);
   }
 
@@ -184,12 +190,51 @@
     { nome: 'VIGIA', ok: !falhou(d.alertas), motivo: d.alertas && d.alertas.erro },
   ];
 
-  let carregando = null;
+  /* ---- o período de financeiro e tráfego: sempre o mês ao abrir ---- */
+  const ymd = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
+  const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  function intervalo(p) {
+    const hoje = ymd(new Date());
+    const [a, m] = hoje.split('-').map(Number);
+    if (p === 'hoje') return { de: hoje, ate: hoje, rotulo: 'hoje' };
+    if (p === '7d') return { de: ymd(new Date(Date.now() - 6 * 86400000)), ate: hoje, rotulo: '7 dias' };
+    if (p === 'mes_anterior') {
+      const ini = new Date(Date.UTC(a, m - 2, 1)), fim = new Date(Date.UTC(a, m - 1, 0));
+      return { de: ini.toISOString().slice(0, 10), ate: fim.toISOString().slice(0, 10), rotulo: MESES[ini.getUTCMonth()] };
+    }
+    return null; // o mês corrente: o padrão do servidor
+  }
+  let periodo = null; // null = mês corrente
+  function marcarSeletor(chave, rotulo) {
+    document.querySelectorAll('#periodo button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.p === chave)));
+    const c = document.querySelector('#periodo .custom');
+    c.hidden = chave !== 'custom'; c.textContent = chave === 'custom' ? rotulo : '';
+    document.querySelectorAll('#pFinanceiro .per, #pTrafego .per').forEach((s) => { s.textContent = rotulo; });
+  }
+  $('periodo').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-p]'); if (!b) return;
+    periodo = intervalo(b.dataset.p);
+    marcarSeletor(b.dataset.p, periodo ? periodo.rotulo : 'mês');
+    atualizar();
+  });
+  /* chamado pelo app.js quando a voz pediu outro período (lib/tela.js) */
+  window.definirPeriodo = (p) => {
+    if (!p || p.mes) { periodo = null; marcarSeletor('mes', 'mês'); }
+    else {
+      periodo = { de: p.de, ate: p.ate || p.de, rotulo: p.rotulo || `${p.de.slice(8, 10)}/${p.de.slice(5, 7)} a ${(p.ate || p.de).slice(8, 10)}/${(p.ate || p.de).slice(5, 7)}` };
+      marcarSeletor('custom', periodo.rotulo);
+    }
+    atualizar();
+  };
+
+  let carregando = null, deNovo = false;
   function atualizar() {
-    if (carregando) return carregando;
+    // trocou o período no meio de uma leitura: lê de novo quando acabar
+    if (carregando) { deNovo = true; return carregando; }
     carregando = (async () => {
       try {
-        const r = await fetch('/api/painel', { credentials: 'same-origin' });
+        const qs = periodo ? `?de=${periodo.de}&ate=${periodo.ate}` : '';
+        const r = await fetch('/api/painel' + qs, { credentials: 'same-origin' });
         if (r.status === 401) return null;
         const d = await r.json();
         const desenhar = [[tarefas, d.tarefas], [agenda, d.agenda], [atendimento, d.atendimento], [alertas, d.alertas],
@@ -200,7 +245,10 @@
       } catch (e) {
         console.warn('[jarvis] painel indisponível:', e.message);
         return null;
-      } finally { carregando = null; }
+      } finally {
+        carregando = null;
+        if (deNovo) { deNovo = false; atualizar(); }
+      }
     })();
     return carregando;
   }

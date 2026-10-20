@@ -59,6 +59,8 @@ try { tarefas = require('../lib/tarefas'); } catch (e) { console.warn('[nexus] t
 let tarefasPessoais = null, fechamento = null;
 try { tarefasPessoais = require('../lib/tarefas-pessoais'); } catch (e) { console.warn('[nexus] tarefas pessoais não disponível:', e.message); }
 try { fechamento = require('../lib/fechamento'); } catch (e) { console.warn('[nexus] fechamento não disponível:', e.message); }
+let tela = null;
+try { tela = require('../lib/tela'); } catch (e) { console.warn('[nexus] tela não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -388,6 +390,9 @@ Quando ele pedir para mandar algo no WhatsApp dele (o que você acabou de falar,
 "Me lembra de...", "anota...", "não me deixa esquecer...": tarefa_criar, com a hora em quando (o aviso chega no WhatsApp dele) ou só o dia. Calcule a data a partir de hoje e de agora. Sem hora num "me lembra": pergunte; "amanhã" sem hora é 9h. "O que tenho hoje?": tarefas_listar. "Já fiz", "esquece", "passa pra amanhã": tarefa_atualizar. Grava direto, sem pedir confirmação: diga em meia frase o que ficou e quando.
 "Fecha meu dia", "como foi o dia?": fechamento_do_dia.
 
+== NÚMEROS E PERÍODOS ==
+Dinheiro (quanto entrou, saiu, saldo, contas): financeiro_caixa, que é a mesma conta do dashboard do Financeiro; ele confere lá e tem que bater. Os painéis da tela abrem sempre no mês corrente; se ele pedir para ver outro período na tela, use painel_periodo (e responda com os números do período).
+
 == ESCRITAS (FINANCEIRO E OPERA) ==
 Lançamento manual: financeiro_lancar. Baixa de conta: consulte financeiro_contas e use financeiro_dar_baixa. Compromisso: opera_agendar. Processo/cálculo: opera_criar_processo (atuação primeiro, um passo de cada vez, nunca pergunte o status).
 Colete o que faltar de forma natural antes de propor. Todas seguem as AÇÕES COM CONFIRMAÇÃO abaixo.
@@ -461,6 +466,7 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
     if (reconquista && reconquista.disponivel()) extras.push(...reconquista.FERRAMENTAS);
     if (tarefasPessoais && tarefasPessoais.disponivel()) extras.push(...tarefasPessoais.FERRAMENTAS);
     if (fechamento) extras.push(...fechamento.FERRAMENTAS);
+    if (tela) extras.push(...tela.FERRAMENTAS);
     if (acoes && acoes.disponivel()) {
       extras.push(...acoes.FERRAMENTAS);
       if (escritas) extras.push(...escritas.FERRAMENTAS);
@@ -650,6 +656,8 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
     }
 
     if (cartoes.length) data.cartoes = cartoes;
+    // a voz pediu outro período nos painéis (lib/tela.js)
+    if (ctxAcao && ctxAcao.painel) data.painel = ctxAcao.painel;
     if (emStream) { emitir({ tipo: 'fim', ...data }); return res.end(); }
     res.status(r.status).json(data);
   } catch (e) {
