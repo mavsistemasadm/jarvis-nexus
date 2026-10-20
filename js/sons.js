@@ -1,29 +1,34 @@
 /* ============================================================
    OS SONS (20/10/2026)
 
-   Pedido do dono: sons de verdade, gravados, nada de "som de computador".
-   Saíram o zumbido e os ruídos sintetizados do app.js; entram efeitos da
-   Mixkit (licença Sound Effects Free: uso comercial e pessoal, sem
-   atribuição; não pode revender os arquivos soltos). Cortados e
-   normalizados em media/sons/ (-16 LUFS), cada um com o número da Mixkit:
+   Pedido do dono: sons de verdade, gravados, nada de "som de computador",
+   e a entrada com cara de algo LIGANDO (relé, energia subindo, máquina
+   dando partida), não de uma chegada com impacto. Efeitos da Mixkit
+   (licença Sound Effects Free: uso comercial e pessoal, sem atribuição; não
+   pode revender os arquivos soltos), cortados e normalizados em
+   media/sons/ (-16 LUFS), com o número e o título na Mixkit:
 
-     varredura  277   checagem dos sistemas na entrada
-     whoosh     2596  passagem da sequência para o vídeo
-     subida     1287  o núcleo se formando
-     impacto    2908  "JARVIS ONLINE"
-     ok         2573  sistema online
-     offline    1093  sistema fora
-     paineis    902   os painéis se montando
-     ouvir      896   começou a ouvir
-     confirmar  911   cartão esperando o "sim"
-     transicao  166   passagem curta
+     ligar       1808  Electric switch              o toque: relé armando
+     energia     2602  Electronics power up          checagem: energia subindo
+     servos      3117  Mechanical technology movements  textura por baixo
+     clique      2582  Quick switch click            cada sistema checado
+     partida     2689  Futuristic machine starting   o núcleo se formando
+     estabiliza  3201  Electric charge hum           "JARVIS ONLINE"
+     paineis     2530  Futuristic robotic mechanism  os painéis se montando
+     ouvir       2579  Light switch sound            começou a ouvir
+     confirmar   2857  Gear fast lock tap            cartão esperando o "sim"
+
+   ⚠️ A primeira busca (20/10/2026) leu o título do item ANTERIOR da página
+   da Mixkit (o título vem depois do arquivo no HTML) e escolheu sons
+   errados, que soaram como MIDI. Ao trocar um som, confira o título pelo
+   número em mixkit.co antes.
 
    Os arquivos são baixados ao abrir a página e decodificados no primeiro
    toque (o navegador só libera áudio depois de um gesto). "Efeitos
    sonoros" desligado nas configurações cala tudo.
    ============================================================ */
 (function () {
-  const NOMES = ['varredura', 'whoosh', 'subida', 'impacto', 'ok', 'offline', 'paineis', 'ouvir', 'confirmar', 'transicao'];
+  const NOMES = ['ligar', 'energia', 'servos', 'clique', 'partida', 'estabiliza', 'paineis', 'ouvir', 'confirmar'];
   const brutos = {};
   const buffers = {};
   let ctx = null, mestre = null;
@@ -43,12 +48,12 @@
     } catch (e) { ctx = null; }
   }
 
-  /** Toca um som. `vol` 0–1, `atraso` em segundos. Devolve uma função que
-      corta o som com um fade curto (a varredura para quando a sequência
-      acaba). */
-  function tocar(nome, vol = 0.7, atraso = 0) {
+  /** Toca um som. `vol` 0–1, `atraso` em segundos, `tom` muda a velocidade
+      (1 = original; cliques variam um pouco para não soarem iguais).
+      Devolve uma função que corta o som com um fade curto. */
+  function tocar(nome, vol = 0.7, atraso = 0, tom = 1) {
     if (!ctx || !ligado() || !buffers[nome]) return () => {};
-    const s = ctx.createBufferSource(); s.buffer = buffers[nome];
+    const s = ctx.createBufferSource(); s.buffer = buffers[nome]; s.playbackRate.value = tom;
     const g = ctx.createGain(); g.gain.value = vol;
     s.connect(g); g.connect(mestre);
     const t = ctx.currentTime + atraso;

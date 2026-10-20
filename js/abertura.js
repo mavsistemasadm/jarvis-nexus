@@ -5,17 +5,18 @@
 
    1. Sequência de inicialização: cantos de mira, linhas que checam cada
       sistema com o estado REAL (window.painelPronto, de js/painel.js),
-      barra de progresso, coluna de código correndo. Varredura ao fundo e
-      um tom por sistema checado.
+      barra de progresso, coluna de código correndo. Energia subindo ao fundo e
+      um clique de interruptor por sistema.
    2. O vídeo da abertura (js/nucleo.js): a rede se conecta e acende o
       núcleo.
-   3. Impacto cinematográfico e "JARVIS ONLINE" com falha de
+   3. A energia estabiliza e "JARVIS ONLINE" aparece com falha de
       holograma. Ele cumprimenta pela hora e diz se algum sistema caiu.
    4. Os painéis se montam (body.pronto, css/style.css).
 
-   Os sons são gravados (js/sons.js, media/sons/): varredura na checagem,
-   tom de confirmação por sistema, whoosh na passagem, subida enquanto o
-   núcleo se forma e o impacto no "JARVIS ONLINE". Desligar "Abertura ao
+   Os sons são gravados (js/sons.js, media/sons/) e contam um sistema
+   sendo LIGADO: relé no toque, energia subindo na checagem, um clique de
+   interruptor por sistema, a máquina dando partida enquanto o núcleo se
+   forma e a energia estabilizando no "JARVIS ONLINE". Sem impacto. Desligar "Abertura ao
    ligar" ou "reduzir movimento" pula direto para o fim.
 
    ⚠️ Um sistema fora do ar aparece como OFFLINE em âmbar e entra na fala.
@@ -26,7 +27,8 @@
   const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ---- sons: gravados, de js/sons.js ---- */
-  const som = (nome, vol, atraso) => (window.Sons ? Sons.tocar(nome, vol, atraso) : () => {});
+  const som = (nome, vol, atraso, tom) => (window.Sons ? Sons.tocar(nome, vol, atraso, tom) : () => {});
+  const clique = (ok) => som('clique', ok ? 0.4 : 0.5, 0, ok ? 0.92 + Math.random() * 0.16 : 0.7);
 
   /* ---- a cena ---- */
   function montar() {
@@ -94,7 +96,10 @@
     const lista = cena.el.querySelector('.seq-linhas');
     if (window.Sons) await Sons.prontos(1200);
     await espera(250);
-    const pararVarredura = som('varredura', 0.4);
+    // o toque arma o relé; a energia sobe enquanto os sistemas são checados
+    som('ligar', 0.85);
+    const pararEnergia = som('energia', 0.5, 0.35);
+    const pararServos = som('servos', 0.22, 0.9);
 
     const base = [
       ['NÚCLEO NEURAL', 'ONLINE'], ['SÍNTESE DE VOZ', 'ONLINE'],
@@ -104,7 +109,7 @@
     progresso(cena.el, 38, 1100);
     for (const [nome, estado] of base) {
       const marcar = linhaSeq(lista, nome);
-      await espera(150); marcar(estado, estado === 'ONLINE'); som(estado === 'ONLINE' ? 'ok' : 'offline', 0.3);
+      await espera(150); marcar(estado, estado === 'ONLINE'); clique(estado === 'ONLINE');
       await espera(110);
     }
     // os sistemas de verdade: o que o painel conseguiu ler
@@ -114,19 +119,19 @@
     for (const s of sistemas || [{ nome: 'SISTEMAS DO GRUPO MH', ok: false }]) {
       const marcar = linhaSeq(lista, s.nome === 'META' ? 'META ADS' : s.nome === 'GOOGLE' ? 'GOOGLE ADS' : s.nome);
       await espera(130);
-      marcar(sistemas ? (s.ok ? 'ONLINE' : 'OFFLINE') : 'SEM RESPOSTA', s.ok); som(s.ok ? 'ok' : 'offline', s.ok ? 0.32 : 0.5);
+      marcar(sistemas ? (s.ok ? 'ONLINE' : 'OFFLINE') : 'SEM RESPOSTA', s.ok); clique(s.ok);
       await espera(90);
     }
     await espera(350);
-    pararVarredura();
-    som('whoosh', 0.75);
-    som('subida', 0.55, 0.5);
+    pararEnergia(); pararServos();
+    // a máquina dá partida junto com o vídeo e acelera até o núcleo acender
+    som('partida', 0.6, 0.15);
     cena.el.classList.add('saindo');
     setTimeout(() => { cena.parar(); cena.el.remove(); }, 900);
 
     // o vídeo do núcleo nascendo; no fim, o impacto
     Nucleo.abertura(async () => {
-      som('impacto', 0.95);
+      som('estabiliza', 0.6);
       if (window.Nucleo) Nucleo.pulso();
       const titulo = document.createElement('div');
       titulo.id = 'online';
