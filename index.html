@@ -8,18 +8,46 @@
 <link rel="icon" href="/icons/jarvis.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0B0F1C">
+<meta name="theme-color" content="#02060f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preload" href="/media/nucleo.mp4" as="video" type="video/mp4">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<canvas id="scene"></canvas>
 
-<div id="boot"><div class="spark"></div><div class="t">J A R V I S</div><div class="s">toque para ativar</div></div>
+<!-- O núcleo (20/10/2026): o vídeo do Higgsfield em loop, e por cima a rede
+     neural desenhada ao vivo (js/nucleo.js), que é o que reage à voz. -->
+<div id="fundo" aria-hidden="true">
+  <video id="nucleoVideo" src="/media/nucleo.mp4" poster="/media/nucleo.jpg" muted loop playsinline autoplay preload="auto"></video>
+  <video id="aberturaVideo" src="/media/abertura.mp4" muted playsinline preload="auto"></video>
+  <canvas id="rede"></canvas>
+  <div class="grade"></div>
+  <div class="varredura"></div>
+  <div class="vinheta"></div>
+</div>
 
-<div id="hud-top">
-  <div id="status"><span class="dot"></span><span id="statusText">inicializando</span></div>
-  <div class="brand">JARVIS</div>
+<div id="boot">
+  <div class="spark"></div>
+  <div class="t">J A R V I S</div>
+  <div class="s">toque para ativar</div>
+</div>
+
+<header id="hud-top">
+  <div class="marca">
+    <svg viewBox="0 0 34 34" aria-hidden="true"><circle class="marca-giro" cx="17" cy="17" r="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 3"/><circle cx="17" cy="17" r="5.5" fill="currentColor"/></svg>
+    <div><span class="brand">JARVIS</span><small>ASSISTENTE DO GRUPO MH</small></div>
+  </div>
+  <div class="centro-topo">
+    <div id="status"><span class="dot"></span><span id="statusText">inicializando</span></div>
+    <ul id="sistemas" aria-label="Sistemas conectados"></ul>
+  </div>
   <div class="hud-acoes">
+    <div id="relogio" aria-hidden="true"><span class="hora">--:--</span><span class="data"></span></div>
+    <button id="painelBtn" class="icone" aria-label="Painel do dia" title="Painel do dia">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="8" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="15" width="7" height="6" rx="1"/></svg>
+    </button>
     <button id="histBtn" class="icone" aria-label="Histórico de hoje" title="Histórico de hoje">
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>
     </button>
@@ -33,6 +61,43 @@
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
     </button>
   </div>
+</header>
+
+<!-- O dia em volta do núcleo (js/painel.js, /api/painel). -->
+<main id="hud">
+  <div class="coluna esq">
+    <section class="painel" id="pTarefas" style="--atraso:.1s">
+      <header><h2>Hoje · tarefas</h2><span class="idx">01</span></header>
+      <div class="corpo"><p class="carregando">carregando…</p></div>
+    </section>
+    <section class="painel" id="pAgenda" style="--atraso:.25s">
+      <header><h2>Agenda · Opera</h2><span class="idx">02</span></header>
+      <div class="corpo"><p class="carregando">carregando…</p></div>
+    </section>
+    <section class="painel" id="pWhatsapp" style="--atraso:.4s">
+      <header><h2>Esperando resposta</h2><span class="idx">03</span></header>
+      <div class="corpo"><p class="carregando">carregando…</p></div>
+    </section>
+  </div>
+  <div class="coluna dir">
+    <section class="painel" id="pDinheiro" style="--atraso:.18s">
+      <header><h2>Dinheiro de hoje</h2><span class="idx">04</span></header>
+      <div class="corpo"><p class="carregando">carregando…</p></div>
+    </section>
+    <section class="painel" id="pTrafego" style="--atraso:.33s">
+      <header><h2>Tráfego · hoje</h2><span class="idx">05</span></header>
+      <div class="corpo"><p class="carregando">carregando…</p></div>
+    </section>
+    <section class="painel alerta" id="pAlertas" style="--atraso:.48s">
+      <header><h2>Alertas</h2><span class="radar" aria-hidden="true"><span></span></span></header>
+      <div class="corpo"><p class="carregando">carregando…</p></div>
+    </section>
+  </div>
+</main>
+
+<div id="fala">
+  <div id="ondas" aria-hidden="true"></div>
+  <div id="caption" aria-live="polite"></div>
 </div>
 
 <!-- Cartão: tabela de números ou ação esperando o "sim" (lib/cartoes.js). -->
@@ -44,17 +109,18 @@
   <div id="logLista"></div>
 </aside>
 
-<div id="caption"></div>
-
 <div id="bar">
-  <button id="mic" title="Falar">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+  <button id="mic" aria-label="Falar" title="Falar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
       <rect x="9" y="3" width="6" height="11" rx="3"/>
       <path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>
     </svg>
   </button>
+  <label for="textIn" class="so-leitor">Pergunte ou peça algo ao Jarvis</label>
   <input id="textIn" placeholder="Fale ou digite sua pergunta…" autocomplete="off">
-  <button id="send">ENVIAR</button>
+  <button id="send" aria-label="Enviar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  </button>
 </div>
 
 <div id="panel">
@@ -67,13 +133,13 @@
   <label><input type="checkbox" id="webSearch" checked> Busca na web</label>
   <div class="voice-row">
     <h3>Voz e som</h3>
-    <select id="voiceSel"></select>
-    <label style="margin-top:8px"><input type="checkbox" id="ttsOn" checked> Responder por voz</label>
+    <select id="voiceSel" aria-label="Voz do navegador"></select>
+    <label><input type="checkbox" id="ttsOn" checked> Responder por voz</label>
     <label><input type="checkbox" id="sfxOn" checked> Efeitos sonoros</label>
-    <label style="margin-top:8px;display:block">Palavra de ativação
-      <input type="text" id="wakeWord" value="Jarvis" style="width:100%;margin-top:4px;background:#071226;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;font-size:12px">
+    <label><input type="checkbox" id="aberturaOn" checked> Abertura ao ligar</label>
+    <label class="campo">Palavra de ativação
+      <input type="text" id="wakeWord" value="Jarvis">
     </label>
-    <select id="palSel" style="margin-top:8px"><option value="thermal">Paleta: térmica (esquenta ao falar)</option><option value="blue">Paleta: azul cósmico</option><option value="fire">Paleta: fogo solar</option></select>
   </div>
   <div class="hint">Menos fontes ativas = respostas mais rápidas.</div>
 </div>
@@ -102,8 +168,9 @@
 })();
 </script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/nucleo.js"></script>
 <script src="js/app.js"></script>
+<script src="js/painel.js"></script>
 <script src="js/spotify-player.js"></script>
 </body>
 </html>

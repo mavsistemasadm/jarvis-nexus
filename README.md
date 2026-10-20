@@ -23,9 +23,12 @@ microfone, e diga **"Nexus"**.
 ## Estrutura
 
 ```
-index.html       # casca da interface
-css/style.css    # estilos do HUD
-js/app.js        # cena 3D, som, voz (wake word), cérebro
+index.html       # casca da interface (HUD)
+css/style.css    # a linguagem visual: tokens, painéis chanfrados, ciano/âmbar
+js/nucleo.js     # o núcleo: vídeo em loop + rede neural viva que reage à voz
+js/painel.js     # os seis painéis do dia em volta do núcleo (/api/painel)
+js/app.js        # som, voz (wake word), conversa, cartões, histórico
+media/           # abertura.mp4 e nucleo.mp4 (gerados no Higgsfield)
 api/chat.js      # proxy da Claude API + loop de tool use + ações por tag
 api/negocios.js  # camada de leitura das três bases de negócio
 server.js        # mesmo proxy para rodar local (node server.js)
@@ -339,3 +342,21 @@ na Academy (`registrarGravacoes`).
   (`fechamento_do_dia`), e aí o das 18h30 fica calado.
 - **"Manda no meu WhatsApp"**: `whatsapp_me_enviar` (`lib/escritas.js`),
   sempre para `WHATSAPP_DONO`, sem campo de destino.
+
+## A tela: HUD com núcleo neural (20/10/2026)
+
+- **O núcleo** é o vídeo `media/nucleo.mp4` (Higgsfield, Kling 3.0) em loop,
+  com a rede neural viva desenhada por cima em `js/nucleo.js`: calma em
+  espera, tempestade de sinapses quando pensa, pulso no ritmo da voz quando
+  fala, âmbar quando chega alerta novo. A supernova em Three.js saiu.
+- ⚠️ A rede se alinha ao núcleo do vídeo por `NUCLEO_X/Y/R` em
+  `js/nucleo.js`. Trocar o vídeo por outro = conferir essas três medidas.
+- **A abertura** (`media/abertura.mp4`) toca uma vez ao ativar e termina no
+  primeiro quadro do loop. Dá para desligar em Configurações.
+- **Os painéis** vêm de `/api/painel` (só o dono): tarefas, agenda, quem
+  espera resposta, dinheiro de hoje, tráfego de hoje e alertas. Cada um é
+  isolado; fonte que falhou diz "não consegui verificar", nunca zero. O check
+  da tarefa conclui direto, sem passar pelo modelo.
+- **Toda tela segue `css/style.css`**: cartões, histórico, configurações, a
+  porta de entrada e `memorias.html`. Elemento novo usa os tokens (`--ciano`,
+  `--ambar`, `--chanfro`), senão destoa.

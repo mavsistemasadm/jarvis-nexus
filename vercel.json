@@ -30,6 +30,10 @@
       "use": "@vercel/static"
     },
     {
+      "src": "media/**",
+      "use": "@vercel/static"
+    },
+    {
       "src": "favicon.ico",
       "use": "@vercel/static"
     }

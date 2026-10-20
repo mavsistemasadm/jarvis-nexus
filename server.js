@@ -16,7 +16,7 @@ const path = require('path');
   } catch (e) {}
 })();
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.ico': 'image/x-icon', '.svg': 'image/svg+xml' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.webp': 'image/webp' };
 const PUB = __dirname;
 const BLOCKED = /^(\.|server\.js|package\.json|README|api|node_modules)/i;
 
@@ -30,6 +30,7 @@ const apiMake = require('./api/make');
 const apiRotina = require('./api/rotina');
 const apiLembretes = require('./api/lembretes');
 const apiFimDoDia = require('./api/fim-do-dia');
+const apiPainel = require('./api/painel');
 const apiWhatsapp = require('./api/whatsapp');
 const apiNexusSso = require('./api/nexus-sso');
 const apiSessao = require('./api/sessao');
@@ -101,6 +102,7 @@ http.createServer(async (req, res) => {
   if (req.url.startsWith('/api/nexus-sso')) return wrapHandler(apiNexusSso)(req, res);
   if (req.url.startsWith('/api/sessao')) return wrapHandler(apiSessao)(req, res);
   if (req.url.startsWith('/api/memorias')) return wrapHandler(apiMemorias)(req, res);
+  if (req.url.startsWith('/api/painel')) return wrapHandler(apiPainel)(req, res);
   if (req.url.startsWith('/api/cerebro-receber')) return wrapHandler(apiCerebroReceber)(req, res);
   if (req.url === '/favicon.ico') { res.writeHead(204); return res.end(); }
   serveStatic(req, res);
