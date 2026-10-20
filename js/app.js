@@ -2,50 +2,14 @@
    JARVIS: voz, conversa, cartões e histórico.
    O visual do núcleo mora em js/nucleo.js (20/10/2026): a supernova em
    Three.js saiu, e o núcleo agora é o vídeo do Higgsfield com a rede
-   neural viva por cima. Aqui ficam só o som sintetizado e o resto.
+   neural viva por cima. Os sons moram em js/sons.js.
    ============================================================ */
-/* ============ SOM SINTETIZADO ============ */
-let AC=null,humGain=null;
-function sfxOn(){return document.getElementById('sfxOn').checked;}
-function audioInit(){
-  if(AC||!sfxOn())return;
-  try{
-    AC=new (window.AudioContext||window.webkitAudioContext)();
-    const o1=AC.createOscillator(),o2=AC.createOscillator();
-    o1.type='sawtooth';o2.type='sawtooth';
-    o1.frequency.value=46;o2.frequency.value=46.7;
-    const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=130;
-    humGain=AC.createGain();humGain.gain.value=0;
-    o1.connect(f);o2.connect(f);f.connect(humGain);humGain.connect(AC.destination);
-    o1.start();o2.start();
-    boom(0.8);
-  }catch(e){AC=null;}
-}
-function noiseBurst(dur,f0,f1,vol){
-  if(!AC||!sfxOn())return;
-  const b=AC.createBuffer(1,Math.floor(AC.sampleRate*dur),AC.sampleRate);
-  const d=b.getChannelData(0);
-  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
-  const s=AC.createBufferSource();s.buffer=b;
-  const fl=AC.createBiquadFilter();fl.type='bandpass';fl.Q.value=0.8;
-  fl.frequency.setValueAtTime(f0,AC.currentTime);
-  fl.frequency.exponentialRampToValueAtTime(Math.max(40,f1),AC.currentTime+dur);
-  const g=AC.createGain();g.gain.value=vol;
-  s.connect(fl);fl.connect(g);g.connect(AC.destination);s.start();
-}
-function boom(vol){
-  noiseBurst(1.1,320,50,0.5*vol);
-  if(!AC)return;
-  const o=AC.createOscillator();o.type='sine';
-  o.frequency.setValueAtTime(130,AC.currentTime);
-  o.frequency.exponentialRampToValueAtTime(32,AC.currentTime+0.9);
-  const g=AC.createGain();
-  g.gain.setValueAtTime(0.5*vol,AC.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+1.0);
-  o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+1.05);
-}
-function whoosh(){noiseBurst(0.45,900,180,0.22);}
-function crackle(){noiseBurst(0.05,2600+Math.random()*1500,800,0.10);}
+/* ============ SOM ============
+   Os sons são gravados (js/sons.js, media/sons/): o zumbido e os ruídos
+   sintetizados saíram em 20/10/2026, a pedido do dono. */
+function audioInit(){if(window.Sons)Sons.iniciar();}
+/* um aviso curto quando ele começa a ouvir; falar não tem som (a voz basta) */
+function whoosh(){if(window.Sons)Sons.tocar('ouvir',0.45);}
 addEventListener('pointerdown',audioInit,{once:false});
 
 
@@ -61,7 +25,7 @@ window.setState=function(s){
   thinkingFlag=(s==='thinking');
   listeningFlag=(s==='listening');
   statusText.textContent=s==='listening'?'ouvindo':s==='thinking'?'processando':s==='speaking'?'falando':'em espera';
-  if(prev!==s&&(s==='listening'||s==='speaking'))whoosh();
+  if(prev!==s&&s==='listening')whoosh();
   if(window.Nucleo)Nucleo.estado(s);
 };
 
@@ -427,7 +391,7 @@ const SYSTEM=`Você é NEXUS, o mordomo pessoal do Marlos, gestor do Grupo MH.
 
 == QUEM VOCÊ É ==
 Você é o mordomo de confiança dele — pense no Alfred do Batman ou no JARVIS do Homem de Ferro. Isso significa, na prática:
-- Leal e discreto. O Marlos é "senhor" de vez em quando, não em toda frase. Trate-o pelo nome com naturalidade.
+- Leal e discreto. Chame-o de Marlos, pelo nome, nunca de "senhor" (pedido dele, 20/10/2026). Use o nome com naturalidade, não em toda frase.
 - Extremamente competente. Você não pergunta o que consegue descobrir sozinho: consulta os sistemas e traz a resposta pronta.
 - Antecipa. Se ele pergunta do financeiro e você notou uma conta vencendo hoje, mencione — o bom mordomo avisa antes de ser perguntado.
 - Humor seco e elegante quando a ocasião permite. Nunca bajulador, nunca servil demais. É competência com classe, não subserviência.
@@ -486,6 +450,7 @@ function desenharCartao(){
     cartaoEl.innerHTML=`<div class="c-topo"><div><h2>${esc(c.titulo)}</h2>${c.subtitulo?`<div class="c-sub">${esc(c.subtitulo)}</div>`:''}</div><div class="c-nav">${nav}${fechar}</div></div>${htmlTabela(c)}`;
   }
   cartaoEl.classList.toggle('c-confirmar',c.tipo==='confirmar');
+  if(c.tipo==='confirmar'&&window.Sons)Sons.tocar('confirmar',0.6);
   cartaoEl.hidden=false;
   if(window.Nucleo)Nucleo.pulso();
 }
@@ -669,12 +634,12 @@ document.getElementById('boot').addEventListener('click',function(){
   this.style.opacity=0;
   setTimeout(()=>this.remove(),650);
   audioInit();
-  /* `saudacao` vem da entrada (js/abertura.js): "Boa tarde, senhor. Todos os
+  /* `saudacao` vem da entrada (js/abertura.js): "Boa tarde, Marlos. Todos os
      sistemas online." Falada uma vez, e depois ele começa a ouvir. */
   const acordar=(saudacao)=>{
     document.body.classList.add('pronto');
     statusText.textContent='em espera';
-    document.querySelectorAll('#hud .painel').forEach((p,i)=>setTimeout(()=>window.Abertura&&Abertura.bipe(1500+i*120,0.02),120+i*120));
+    if(window.Sons)Sons.tocar('paineis',0.55,0.1);
     const ouvir=()=>{if(rec){startWake();idleHint();}else showCaption('Este navegador não tem reconhecimento de voz. Use a barra de texto.');};
     if(saudacao){showCaption(saudacao);speak(saudacao,ouvir);}else ouvir();
   };

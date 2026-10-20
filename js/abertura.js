@@ -5,68 +5,28 @@
 
    1. Sequência de inicialização: cantos de mira, linhas que checam cada
       sistema com o estado REAL (window.painelPronto, de js/painel.js),
-      barra de progresso, coluna de código correndo. Som de subida e um
-      bipe por linha.
+      barra de progresso, coluna de código correndo. Varredura ao fundo e
+      um tom por sistema checado.
    2. O vídeo da abertura (js/nucleo.js): a rede se conecta e acende o
       núcleo.
-   3. Impacto: estrondo, acorde brilhante e "JARVIS ONLINE" com falha de
+   3. Impacto cinematográfico e "JARVIS ONLINE" com falha de
       holograma. Ele cumprimenta pela hora e diz se algum sistema caiu.
    4. Os painéis se montam (body.pronto, css/style.css).
 
-   O som é sintetizado na hora (Web Audio, as funções de som do app.js):
-   nada para baixar. Desligar "Abertura ao ligar" ou "reduzir movimento"
-   pula direto para o fim.
+   Os sons são gravados (js/sons.js, media/sons/): varredura na checagem,
+   tom de confirmação por sistema, whoosh na passagem, subida enquanto o
+   núcleo se forma e o impacto no "JARVIS ONLINE". Desligar "Abertura ao
+   ligar" ou "reduzir movimento" pula direto para o fim.
 
    ⚠️ Um sistema fora do ar aparece como OFFLINE em âmbar e entra na fala.
    A entrada não esconde problema para ficar bonita.
    ============================================================ */
 (function () {
   const reduzir = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const somLigado = () => typeof AC !== 'undefined' && AC && document.getElementById('sfxOn').checked;
   const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  /* ---- sons ---- */
-  function bipe(freq = 2100, vol = 0.035, dur = 0.03) {
-    if (!somLigado()) return;
-    const o = AC.createOscillator(), g = AC.createGain();
-    o.type = 'square'; o.frequency.value = freq;
-    g.gain.setValueAtTime(vol, AC.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
-    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + dur + 0.01);
-  }
-  function subida(dur) {
-    if (!somLigado()) return;
-    const t = AC.currentTime;
-    // ruído que sobe de tom
-    const b = AC.createBuffer(1, Math.floor(AC.sampleRate * dur), AC.sampleRate);
-    const d = b.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const s = AC.createBufferSource(); s.buffer = b;
-    const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2.5;
-    f.frequency.setValueAtTime(250, t); f.frequency.exponentialRampToValueAtTime(5200, t + dur);
-    const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + dur * 0.92); g.gain.linearRampToValueAtTime(0, t + dur);
-    s.connect(f); f.connect(g); g.connect(AC.destination); s.start(t);
-    // um grave que sobe junto
-    const o = AC.createOscillator(); o.type = 'sawtooth';
-    o.frequency.setValueAtTime(55, t); o.frequency.exponentialRampToValueAtTime(220, t + dur);
-    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
-    const go = AC.createGain(); go.gain.setValueAtTime(0.0001, t); go.gain.exponentialRampToValueAtTime(0.09, t + dur * 0.9); go.gain.linearRampToValueAtTime(0, t + dur);
-    o.connect(lp); lp.connect(go); go.connect(AC.destination); o.start(t); o.stop(t + dur + 0.05);
-  }
-  function acorde() {
-    if (!somLigado()) return;
-    const t = AC.currentTime;
-    [220, 329.63, 440, 554.37, 659.25, 880].forEach((fq, i) => {
-      const o = AC.createOscillator(), g = AC.createGain();
-      o.type = i % 2 ? 'triangle' : 'sine'; o.frequency.value = fq;
-      o.detune.value = (i - 2.5) * 4;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.045, t + 0.08 + i * 0.03);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
-      o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + 3.3);
-    });
-  }
-  function impacto() { if (typeof boom === 'function') boom(1); acorde(); }
+  /* ---- sons: gravados, de js/sons.js ---- */
+  const som = (nome, vol, atraso) => (window.Sons ? Sons.tocar(nome, vol, atraso) : () => {});
 
   /* ---- a cena ---- */
   function montar() {
@@ -117,9 +77,9 @@
     const h = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false })) % 24;
     const ola = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const fora = (sistemas || []).filter((s) => !s.ok).map((s) => s.nome.charAt(0) + s.nome.slice(1).toLowerCase());
-    if (!sistemas) return `${ola}, senhor. Núcleo online.`;
-    if (!fora.length) return `${ola}, senhor. Todos os sistemas online.`;
-    return `${ola}, senhor. Sistemas online, exceto ${fora.join(' e ').replace(' e ', fora.length > 2 ? ', ' : ' e ')}.`;
+    if (!sistemas) return `${ola}, Marlos. Núcleo online.`;
+    if (!fora.length) return `${ola}, Marlos. Todos os sistemas online.`;
+    return `${ola}, Marlos. Sistemas online, exceto ${fora.join(' e ').replace(' e ', fora.length > 2 ? ', ' : ' e ')}.`;
   }
 
   async function iniciar(pronto) {
@@ -132,8 +92,9 @@
     }
     const cena = montar();
     const lista = cena.el.querySelector('.seq-linhas');
-    await espera(350);
-    subida(3.4);
+    if (window.Sons) await Sons.prontos(1200);
+    await espera(250);
+    const pararVarredura = som('varredura', 0.4);
 
     const base = [
       ['NÚCLEO NEURAL', 'ONLINE'], ['SÍNTESE DE VOZ', 'ONLINE'],
@@ -142,8 +103,8 @@
     ];
     progresso(cena.el, 38, 1100);
     for (const [nome, estado] of base) {
-      const marcar = linhaSeq(lista, nome); bipe(1800);
-      await espera(150); marcar(estado, estado === 'ONLINE'); bipe(2600, 0.025);
+      const marcar = linhaSeq(lista, nome);
+      await espera(150); marcar(estado, estado === 'ONLINE'); som(estado === 'ONLINE' ? 'ok' : 'offline', 0.3);
       await espera(110);
     }
     // os sistemas de verdade: o que o painel conseguiu ler
@@ -152,18 +113,20 @@
     progresso(cena.el, 100, 1200);
     for (const s of sistemas || [{ nome: 'SISTEMAS DO GRUPO MH', ok: false }]) {
       const marcar = linhaSeq(lista, s.nome === 'META' ? 'META ADS' : s.nome === 'GOOGLE' ? 'GOOGLE ADS' : s.nome);
-      bipe(1800);
       await espera(130);
-      marcar(sistemas ? (s.ok ? 'ONLINE' : 'OFFLINE') : 'SEM RESPOSTA', s.ok); bipe(s.ok ? 2600 : 900, 0.03, s.ok ? 0.03 : 0.08);
+      marcar(sistemas ? (s.ok ? 'ONLINE' : 'OFFLINE') : 'SEM RESPOSTA', s.ok); som(s.ok ? 'ok' : 'offline', s.ok ? 0.32 : 0.5);
       await espera(90);
     }
-    await espera(450);
+    await espera(350);
+    pararVarredura();
+    som('whoosh', 0.75);
+    som('subida', 0.55, 0.5);
     cena.el.classList.add('saindo');
     setTimeout(() => { cena.parar(); cena.el.remove(); }, 900);
 
     // o vídeo do núcleo nascendo; no fim, o impacto
     Nucleo.abertura(async () => {
-      impacto();
+      som('impacto', 0.95);
       if (window.Nucleo) Nucleo.pulso();
       const titulo = document.createElement('div');
       titulo.id = 'online';
@@ -178,5 +141,5 @@
     });
   }
 
-  window.Abertura = { iniciar, bipe };
+  window.Abertura = { iniciar };
 })();
