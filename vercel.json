@@ -56,6 +56,10 @@
     {
       "path": "/api/rotina",
       "schedule": "0 19 * * 1-5"
+    },
+    {
+      "path": "/api/fim-do-dia",
+      "schedule": "30 21 * * 1-5"
     }
   ]
 }

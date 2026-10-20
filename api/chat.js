@@ -56,6 +56,9 @@ try { emails = require('../lib/emails'); } catch (e) { console.warn('[nexus] ema
 let academyApp = null, tarefas = null;
 try { academyApp = require('../lib/academy-app'); } catch (e) { console.warn('[nexus] academy-app não disponível:', e.message); }
 try { tarefas = require('../lib/tarefas'); } catch (e) { console.warn('[nexus] tarefas não disponível:', e.message); }
+let tarefasPessoais = null, fechamento = null;
+try { tarefasPessoais = require('../lib/tarefas-pessoais'); } catch (e) { console.warn('[nexus] tarefas pessoais não disponível:', e.message); }
+try { fechamento = require('../lib/fechamento'); } catch (e) { console.warn('[nexus] fechamento não disponível:', e.message); }
 
 /* ---- Make: automações por voz ---- */
 const makeMod = require('./make');
@@ -378,6 +381,13 @@ Só depois disso responda o que ele perguntou. Tudo junto, natural, sem soar pro
       + `\n\n== MEMÓRIA ==
 Quando ele contar algo duradouro (preferência, pessoa, empresa, um jeito de classificar ou de decidir), guarde com memoria_guardar, sem anunciar. Ele vê e apaga tudo na tela de memórias.
 
+== MANDAR NO WHATSAPP DELE ==
+Quando ele pedir para mandar algo no WhatsApp dele (o que você acabou de falar, uma lista, um resumo, um lembrete), use whatsapp_me_enviar com o texto completo e diga só que mandou. Vai sempre para o número dele, nunca para outra pessoa.
+
+== TAREFAS E LEMBRETES DELE ==
+"Me lembra de...", "anota...", "não me deixa esquecer...": tarefa_criar, com a hora em quando (o aviso chega no WhatsApp dele) ou só o dia. Calcule a data a partir de hoje e de agora. Sem hora num "me lembra": pergunte; "amanhã" sem hora é 9h. "O que tenho hoje?": tarefas_listar. "Já fiz", "esquece", "passa pra amanhã": tarefa_atualizar. Grava direto, sem pedir confirmação: diga em meia frase o que ficou e quando.
+"Fecha meu dia", "como foi o dia?": fechamento_do_dia.
+
 == ESCRITAS (FINANCEIRO E OPERA) ==
 Lançamento manual: financeiro_lancar. Baixa de conta: consulte financeiro_contas e use financeiro_dar_baixa. Compromisso: opera_agendar. Processo/cálculo: opera_criar_processo (atuação primeiro, um passo de cada vez, nunca pergunte o status).
 Colete o que faltar de forma natural antes de propor. Todas seguem as AÇÕES COM CONFIRMAÇÃO abaixo.
@@ -449,6 +459,8 @@ Lançamentos do Asaas, da Conta Simples e do Opera chegam sozinhos e esperam o M
     if (trafego && trafego.disponivel()) extras.push(...trafego.FERRAMENTAS);
     if (googleAds && googleAds.disponivel()) extras.push(...googleAds.FERRAMENTAS);
     if (reconquista && reconquista.disponivel()) extras.push(...reconquista.FERRAMENTAS);
+    if (tarefasPessoais && tarefasPessoais.disponivel()) extras.push(...tarefasPessoais.FERRAMENTAS);
+    if (fechamento) extras.push(...fechamento.FERRAMENTAS);
     if (acoes && acoes.disponivel()) {
       extras.push(...acoes.FERRAMENTAS);
       if (escritas) extras.push(...escritas.FERRAMENTAS);

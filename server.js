@@ -28,6 +28,8 @@ const apiSpotify = require('./api/spotify');
 const apiFacebook = require('./api/facebook');
 const apiMake = require('./api/make');
 const apiRotina = require('./api/rotina');
+const apiLembretes = require('./api/lembretes');
+const apiFimDoDia = require('./api/fim-do-dia');
 const apiWhatsapp = require('./api/whatsapp');
 const apiNexusSso = require('./api/nexus-sso');
 const apiSessao = require('./api/sessao');
@@ -93,6 +95,8 @@ http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/api/facebook') return wrapHandler(apiFacebook)(req, res);
   if (req.method === 'POST' && req.url === '/api/make') return wrapHandler(apiMake)(req, res);
   if (req.url.startsWith('/api/rotina')) return wrapHandler(apiRotina)(req, res);
+  if (req.url.startsWith('/api/lembretes')) return wrapHandler(apiLembretes)(req, res);
+  if (req.url.startsWith('/api/fim-do-dia')) return wrapHandler(apiFimDoDia)(req, res);
   if (req.url.startsWith('/api/whatsapp')) return wrapHandler(apiWhatsapp)(req, res);
   if (req.url.startsWith('/api/nexus-sso')) return wrapHandler(apiNexusSso)(req, res);
   if (req.url.startsWith('/api/sessao')) return wrapHandler(apiSessao)(req, res);

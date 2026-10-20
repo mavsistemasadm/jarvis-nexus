@@ -322,3 +322,20 @@ na Academy (`registrarGravacoes`).
   do dono, app em produção para o token não vencer em 7 dias).
 - Token: tabela `integracoes` (sql/integracoes.sql), só a chave de serviço lê.
 - Env: `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`.
+
+## Tarefas, lembretes e o fechamento do dia (20/10/2026)
+
+- **"Me lembra às 15h de..."**: `tarefa_criar`, `tarefas_listar` e
+  `tarefa_atualizar` (`lib/tarefas-pessoais.js`, tabela `tarefas_pessoais`
+  em `sql/tarefas-pessoais.sql`). Gravam direto, como a memória. Com hora, o
+  aviso chega no WhatsApp pelo `/api/lembretes`; aceita repetir (todo dia,
+  dia útil, semanal, mensal). O bom dia lê as tarefas de hoje.
+- ⚠️ **O disparo é do Supabase, não da Vercel**: o cron do Hobby roda uma vez
+  por dia. O `pg_cron` chama `/api/lembretes` a cada 5 minutos; o bloco para
+  ligar está comentado no fim de `sql/tarefas-pessoais.sql`.
+- **Fechamento do dia** (`lib/fechamento.js`): feito, ficou, amanhã, os
+  números e a prioridade. No WhatsApp às 18h30 dos dias úteis
+  (`/api/fim-do-dia`), ou quando ele pedir "fecha meu dia"
+  (`fechamento_do_dia`), e aí o das 18h30 fica calado.
+- **"Manda no meu WhatsApp"**: `whatsapp_me_enviar` (`lib/escritas.js`),
+  sempre para `WHATSAPP_DONO`, sem campo de destino.
