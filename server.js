@@ -16,7 +16,7 @@ const path = require('path');
   } catch (e) {}
 })();
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.webp': 'image/webp' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json' };
 const PUB = __dirname;
 const BLOCKED = /^(\.|server\.js|package\.json|README|api|node_modules)/i;
 

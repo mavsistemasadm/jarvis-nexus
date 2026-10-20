@@ -669,12 +669,16 @@ document.getElementById('boot').addEventListener('click',function(){
   this.style.opacity=0;
   setTimeout(()=>this.remove(),650);
   audioInit();
-  const acordar=()=>{
+  /* `saudacao` vem da entrada (js/abertura.js): "Boa tarde, senhor. Todos os
+     sistemas online." Falada uma vez, e depois ele começa a ouvir. */
+  const acordar=(saudacao)=>{
     document.body.classList.add('pronto');
     statusText.textContent='em espera';
-    boom(0.6);
-    if(rec){startWake();idleHint();}
-    else showCaption('Este navegador não tem reconhecimento de voz. Use a barra de texto.');
+    document.querySelectorAll('#hud .painel').forEach((p,i)=>setTimeout(()=>window.Abertura&&Abertura.bipe(1500+i*120,0.02),120+i*120));
+    const ouvir=()=>{if(rec){startWake();idleHint();}else showCaption('Este navegador não tem reconhecimento de voz. Use a barra de texto.');};
+    if(saudacao){showCaption(saudacao);speak(saudacao,ouvir);}else ouvir();
   };
-  if(window.Nucleo){setTimeout(()=>whoosh(),1800);Nucleo.abertura(acordar);}else acordar();
+  if(window.Abertura)Abertura.iniciar(acordar);
+  else if(window.Nucleo)Nucleo.abertura(()=>acordar(null));
+  else acordar(null);
 });
