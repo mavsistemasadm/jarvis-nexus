@@ -14,7 +14,7 @@ addEventListener('pointerdown',audioInit,{once:false});
 
 
 /* ============ ESTADOS ============ */
-let speakingFlag=false,thinkingFlag=false,listeningFlag=false;
+let speakingFlag=false,thinkingFlag=false,listeningFlag=false,rotuloAtual='';
 /* ============ ESTADOS UI ============ */
 const statusEl=document.getElementById('status');
 const statusText=document.getElementById('statusText');
@@ -24,10 +24,35 @@ window.setState=function(s){
   speakingFlag=(s==='speaking');
   thinkingFlag=(s==='thinking');
   listeningFlag=(s==='listening');
-  statusText.textContent=s==='listening'?'ouvindo':s==='thinking'?'processando':s==='speaking'?'falando':'em espera';
+  statusText.textContent=s==='listening'?'ouvindo':s==='thinking'?(rotuloAtual||'processando'):s==='speaking'?'falando':'em espera';
   if(prev!==s&&s==='listening')whoosh();
+  if(prev!==s)pensando(s==='thinking',prev==='speaking');
   if(window.Nucleo)Nucleo.estado(s);
 };
+
+/* ============ PENSANDO (21/10/2026) ============
+   Antes, entre o fim da pergunta e a primeira palavra só a tela mudava: de
+   olhos fora dela, não dava para saber se ele tinha entendido. Agora: clique
+   duplo na hora (entendi), zumbido baixo enquanto processa, e, passados 8 s
+   sem voz nenhuma, "Ainda estou nisso, Marlos." (áudio buscado uma vez por
+   sessão, para sair na hora). O aviso de "vou consultar" é do próprio modelo:
+   ver COMO VOCÊ FALA no SYSTEM. */
+let pararZumbido=null,demoraTimer=null,demoraAudio=null,demoraUrl=null;
+function prepararDemora(){
+  if(demoraUrl||voiceSel.value!=='elevenlabs')return;
+  fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Ainda estou nisso, Marlos.'})})
+    .then(r=>r.ok?r.blob():null).then(b=>{if(b)demoraUrl=URL.createObjectURL(b);}).catch(()=>{});
+}
+function pensando(sim,deVolta){
+  clearTimeout(demoraTimer);
+  if(pararZumbido){pararZumbido();pararZumbido=null;}
+  if(!sim){if(demoraAudio){demoraAudio.pause();demoraAudio=null;}return;}
+  if(window.Sons){if(!deVolta){Sons.tocar('clique',0.55);Sons.tocar('clique',0.45,0.11,0.9);}pararZumbido=Sons.loop('pensando',0.09,1,3);}
+  demoraTimer=setTimeout(()=>{
+    if(!thinkingFlag||!demoraUrl||!document.getElementById('ttsOn').checked)return;
+    demoraAudio=new Audio(demoraUrl);demoraAudio.play().catch(()=>{});
+  },8000);
+}
 
 /* ============ VOZ: ENTRADA ============ */
 const micBtn=document.getElementById('mic');
@@ -332,9 +357,12 @@ function criarFala(onDone){
   async function tocar(){
     if(tocando||cancelado)return;
     const item=fila.shift();
-    if(!item){if(acabou)concluir();return;}
+    /* fila vazia no meio da resposta (o aviso já falado, a consulta ainda
+       rodando): volta ao "pensando", com o zumbido */
+    if(!item){if(acabou)concluir();else if(comecou&&speakingFlag)setState('thinking');return;}
     tocando=true;
-    if(!comecou){comecou=true;suppress=true;setState('speaking');}
+    if(!comecou){comecou=true;suppress=true;}
+    if(!speakingFlag)setState('speaking');
     const blob=item.audio?await item.audio:null;
     if(cancelado)return;
     await new Promise(res=>{
@@ -362,6 +390,9 @@ function criarFala(onDone){
   const api={
     empurrar(delta){bruto+=delta;separar(false);},
     separador(){if(bruto&&!/\s$/.test(bruto))bruto+=' ';},
+    // Uma ferramenta começou: o que já veio ("Deixa eu ver o financeiro.")
+    // sai agora, mesmo curto, em vez de esperar a consulta acabar.
+    soltar(){const v=visivel();const r=limpar(v.slice(falado));falado=v.length;if(r)enfileirar(r);},
     visivel:()=>limpar(visivel()),
     falouAlgo:()=>falado>0,
     terminar(){acabou=true;separar(true);if(!ligada||(!tocando&&!fila.length))concluir();},
@@ -403,6 +434,7 @@ Você é o mordomo de confiança dele — pense no Alfred do Batman ou no JARVIS
 - Números de forma falável ("quarenta e sete mil reais" ou "47 mil"), arredondados quando o detalhe não muda a decisão.
 - Traga o que decide, não a tabela inteira: dois ou três itens e o total.
 - Se uma ferramenta falhar, diga em uma frase e sugira o caminho. Nunca preencha a lacuna com estimativa.
+- Antes de consultar um sistema, avise em UMA frase curta o que vai fazer, nas suas palavras, e só então chame a ferramenta: "Deixa eu ver o financeiro.", "Um instante, vou olhar os anúncios." Ele só ouve você, e o silêncio da consulta parece que você não entendeu. Varie a frase. Só na primeira consulta da resposta; na resposta final não repita o aviso. Pergunta que você responde sem consultar: responda direto, sem aviso.
 
 == O NEGÓCIO ==
 O Grupo MH tem quatro frentes com movimento no financeiro: Ecossistema Nexus, MH Cálculos, Peritos Academy e Pró-Labore. A AnyCalc está inativa — não a cite como se operasse. Sempre que falar de valores, diga de qual empresa é.
@@ -502,6 +534,7 @@ async function ask(text){
      pergunta vai só para o histórico, sem voz e sem tomar a legenda. */
   const perguntadaEm=Date.now();
   const foiInterrompida=()=>(window.__interrompidoEm||0)>perguntadaEm;
+  rotuloAtual='';
   setState('thinking');
   history.push({role:'user',content:text});
   if(history.length>16)history=history.slice(-16);
@@ -547,7 +580,7 @@ async function ask(text){
           const bloco=buf.slice(0,i);buf=buf.slice(i+2);
           if(!bloco.startsWith('data: '))continue;
           let ev;try{ev=JSON.parse(bloco.slice(6));}catch(e){continue;}
-          if(ev.tipo==='ferramenta')statusText.textContent=rotuloFerramenta(ev.nome);
+          if(ev.tipo==='ferramenta'){fala.soltar();rotuloAtual=rotuloFerramenta(ev.nome);statusText.textContent=rotuloAtual;}
           else if(ev.tipo==='cartao'){cartoesDaResposta.push(ev.cartao);mostrarCartoes(cartoesDaResposta,true);}
           else if(ev.tipo==='texto'){
             if(ultimaVolta!==null&&ev.volta!==ultimaVolta)fala.separador();
@@ -641,6 +674,7 @@ document.getElementById('boot').addEventListener('click',function(){
     document.body.classList.add('pronto');
     statusText.textContent='em espera';
     if(window.Sons)Sons.tocar('paineis',0.55,0.1);
+    prepararDemora();
     /* speak() liga o suppress; sem desligar aqui, o mic ficava surdo depois
        da saudação (só o nome contava, e só enquanto ele falava). */
     const ouvir=()=>{suppress=false;if(rec){startWake();idleHint();}else showCaption('Este navegador não tem reconhecimento de voz. Use a barra de texto.');};

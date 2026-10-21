@@ -18,6 +18,14 @@
      ouvir       2579  Light switch sound            começou a ouvir
      confirmar   2857  Gear fast lock tap            cartão esperando o "sim"
 
+     pensando    3201  (do estabiliza)               processando, em loop
+
+   Pensando (21/10/2026): "clique" duplo quando ele fecha a pergunta
+   (entendi), e o zumbido em loop baixo enquanto processa. O pensando.mp3 é
+   o miolo do estabiliza (1,15 s a 2,45 s), nivelado e com as pontas
+   mescladas em 0,3 s: 4 voltas iguais de 1 s, para o laço (1 s a 3 s) não
+   estalar nem cair no silêncio que o MP3 põe nas pontas.
+
    ⚠️ A primeira busca (20/10/2026) leu o título do item ANTERIOR da página
    da Mixkit (o título vem depois do arquivo no HTML) e escolheu sons
    errados, que soaram como MIDI. Ao trocar um som, confira o título pelo
@@ -28,7 +36,7 @@
    sonoros" desligado nas configurações cala tudo.
    ============================================================ */
 (function () {
-  const NOMES = ['ligar', 'energia', 'servos', 'clique', 'partida', 'estabiliza', 'paineis', 'ouvir', 'confirmar'];
+  const NOMES = ['ligar', 'energia', 'servos', 'clique', 'partida', 'estabiliza', 'paineis', 'ouvir', 'confirmar', 'pensando'];
   const brutos = {};
   const buffers = {};
   let ctx = null, mestre = null;
@@ -61,6 +69,19 @@
     return () => { try { g.gain.setTargetAtTime(0, ctx.currentTime, 0.12); s.stop(ctx.currentTime + 0.6); } catch (e) {} };
   }
 
+  /** Toca um som em loop entre `ini` e `fim` (segundos), entrando e saindo
+      com fade. Usado no "pensando". Devolve a função que corta. */
+  function loop(nome, vol = 0.1, ini = 0, fim = 0, entrada = 0.6) {
+    if (!ctx || !ligado() || !buffers[nome]) return () => {};
+    const s = ctx.createBufferSource(); s.buffer = buffers[nome];
+    s.loop = true; s.loopStart = ini; s.loopEnd = fim || buffers[nome].duration;
+    const g = ctx.createGain(); g.gain.value = 0;
+    g.gain.setTargetAtTime(vol, ctx.currentTime, entrada / 3);
+    s.connect(g); g.connect(mestre);
+    s.start(ctx.currentTime, ini);
+    return () => { try { g.gain.setTargetAtTime(0, ctx.currentTime, 0.15); s.stop(ctx.currentTime + 0.8); } catch (e) {} };
+  }
+
   /** Espera os sons decodificarem (no máximo `ms`), para a entrada não
       começar muda numa conexão lenta. */
   async function prontos(ms = 1500) {
@@ -68,5 +89,5 @@
     while (Date.now() < fim && NOMES.some((n) => !buffers[n])) await new Promise((r) => setTimeout(r, 60));
   }
 
-  window.Sons = { iniciar, tocar, prontos };
+  window.Sons = { iniciar, tocar, loop, prontos };
 })();
