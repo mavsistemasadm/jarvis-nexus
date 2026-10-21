@@ -641,7 +641,9 @@ document.getElementById('boot').addEventListener('click',function(){
     document.body.classList.add('pronto');
     statusText.textContent='em espera';
     if(window.Sons)Sons.tocar('paineis',0.55,0.1);
-    const ouvir=()=>{if(rec){startWake();idleHint();}else showCaption('Este navegador não tem reconhecimento de voz. Use a barra de texto.');};
+    /* speak() liga o suppress; sem desligar aqui, o mic ficava surdo depois
+       da saudação (só o nome contava, e só enquanto ele falava). */
+    const ouvir=()=>{suppress=false;if(rec){startWake();idleHint();}else showCaption('Este navegador não tem reconhecimento de voz. Use a barra de texto.');};
     if(saudacao){showCaption(saudacao);speak(saudacao,ouvir);}else ouvir();
   };
   if(window.Abertura)Abertura.iniciar(acordar);
