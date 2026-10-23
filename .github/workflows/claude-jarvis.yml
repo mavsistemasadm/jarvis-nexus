@@ -1,0 +1,45 @@
+# O Claude Code atende as tarefas que o Jarvis abre (23/10/2026).
+#
+# O Jarvis abre uma issue com a etiqueta `jarvis` (abrir_tarefa_codigo); este
+# workflow roda o Claude Code aqui no GitHub, que faz o trabalho numa branch,
+# roda os testes, abre um pull request e comenta na issue. Quem publica é o
+# Marlos: o merge só acontece com o sim dele (pelo Jarvis ou no GitHub).
+#
+# ⚠️ Nunca faz merge, nunca aplica migração, nunca envia nada a cliente ou aluno.
+name: Claude Code (tarefas do Jarvis)
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude:
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'jarvis') ||
+      (github.event_name == 'issue_comment' && contains(github.event.issue.labels.*.name, 'jarvis') &&
+       contains(github.event.comment.body, '@claude') && github.event.comment.user.type != 'Bot')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          label_trigger: jarvis
+          track_progress: true
+          claude_args: |
+            --max-turns 80
+            --append-system-prompt "Você atende uma tarefa aberta pelo Jarvis, o assistente do Marlos (dono do Grupo MH). Antes de tudo leia o AGENTS.md e o CLAUDE.md deste repositório e siga as regras deles. Faça o trabalho numa branch nova, rode os testes do projeto (instale as dependências com npm ci se precisar) e abra um pull request para a main com um resumo em português, simples, do que mudou e de como conferir. Comente na issue com esse resumo e o link do pull request. REGRAS QUE NÃO SE QUEBRAM: nunca faça merge nem push na main; nunca aplique migração no banco (escreva o arquivo da migração e diga no PR que ela precisa ser aplicada); nunca envie e-mail, WhatsApp, notificação ou qualquer mensagem a clientes, alunos ou à base; nunca altere dados de produção; nunca exponha segredos. Se a tarefa estiver ambígua ou exigir uma decisão de negócio, comente na issue com a pergunta e pare."
